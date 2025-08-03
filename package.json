@@ -1,0 +1,34 @@
+{
+  "name": "grocery-store",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@payloadcms/db-mongodb": "^3.49.1",
+    "@payloadcms/next": "^3.49.1",
+    "@payloadcms/payload-cloud": "^3.49.1",
+    "@payloadcms/richtext-lexical": "^3.49.1",
+    "aws4": "^1.13.2",
+    "dotenv": "^17.2.1",
+    "graphql": "^16.11.0",
+    "mongoose": "^8.17.0",
+    "next": "15.4.5",
+    "payload": "^3.49.1",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "sharp": "^0.34.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
