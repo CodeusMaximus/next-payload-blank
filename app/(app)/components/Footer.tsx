@@ -1,4 +1,3 @@
-// components/Footer.tsx
 'use client'
 
 import Image from 'next/image'
@@ -63,9 +62,12 @@ const getSocialIcon = (platform: string) => {
 export default function Footer({ data }: FooterProps) {
   const currentYear = new Date().getFullYear()
 
-  const address = data?.contactInfo?.address?.trim()
-  const mapSrc = address
-    ? `https://www.google.com/maps?q=${encodeURIComponent(address)}&output=embed`
+  // Safely compute address values once
+  const addr = (data?.contactInfo?.address ?? '').trim()
+  const hasAddr = addr.length > 0
+  const encodedAddr = encodeURIComponent(addr)
+  const mapSrc = hasAddr
+    ? `https://www.google.com/maps?q=${encodedAddr}&output=embed`
     : null
 
   const [submitting, setSubmitting] = useState(false)
@@ -84,7 +86,6 @@ export default function Footer({ data }: FooterProps) {
     }
 
     try {
-      // Wire this to your API route if desired:
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,14 +122,20 @@ export default function Footer({ data }: FooterProps) {
               <div className="flex gap-4 mt-5">
                 {data.socialLinks.map((social, idx) => {
                   const isMediaDoc =
-                    social.icon &&
+                    !!social.icon &&
                     typeof social.icon === 'object' &&
                     'url' in (social.icon as any)
+
                   const displayName =
                     social.platform === 'other'
                       ? social.customPlatform || 'Social'
-                      : social.platform.charAt(0).toUpperCase() +
-                        social.platform.slice(1)
+                      : social.platform.charAt(0).toUpperCase() + social.platform.slice(1)
+
+                  const iconUrl = isMediaDoc ? (social.icon as MediaDoc).url : undefined
+                  const iconAlt =
+                    (isMediaDoc && (social.icon as MediaDoc).alt) ||
+                    displayName ||
+                    'Social media icon'
 
                   return (
                     <a
@@ -139,14 +146,10 @@ export default function Footer({ data }: FooterProps) {
                       className="text-gray-300 hover:text-white transition-colors"
                       aria-label={`Visit our ${displayName} page`}
                     >
-                      {isMediaDoc ? (
+                      {isMediaDoc && iconUrl ? (
                         <Image
-                          src={(social.icon as MediaDoc).url!}
-                          alt={
-                            (social.icon as MediaDoc).alt ||
-                            displayName ||
-                            'Social media icon'
-                          }
+                          src={iconUrl}
+                          alt={iconAlt}
                           width={24}
                           height={24}
                           className="w-6 h-6"
@@ -204,9 +207,7 @@ export default function Footer({ data }: FooterProps) {
                 {/* Contact form (client) */}
                 <form className="space-y-3" onSubmit={onSubmit}>
                   <div>
-                    <label className="block text-sm text-gray-300 mb-1">
-                      Name
-                    </label>
+                    <label className="block text-sm text-gray-300 mb-1">Name</label>
                     <input
                       name="name"
                       type="text"
@@ -216,9 +217,7 @@ export default function Footer({ data }: FooterProps) {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-300 mb-1">
-                      Email
-                    </label>
+                    <label className="block text-sm text-gray-300 mb-1">Email</label>
                     <input
                       name="email"
                       type="email"
@@ -228,9 +227,7 @@ export default function Footer({ data }: FooterProps) {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm text-gray-300 mb-1">
-                      Message
-                    </label>
+                    <label className="block text-sm text-gray-300 mb-1">Message</label>
                     <textarea
                       name="message"
                       rows={4}
@@ -282,9 +279,9 @@ export default function Footer({ data }: FooterProps) {
                         </a>
                       </p>
                     )}
-                    {address && (
+                    {hasAddr && (
                       <p className="text-gray-400 whitespace-pre-line">
-                        Address: {address}
+                        Address: {addr}
                       </p>
                     )}
                   </div>
@@ -305,13 +302,9 @@ export default function Footer({ data }: FooterProps) {
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-400">
-                        Find us on the map
-                      </span>
+                      <span className="text-sm text-gray-400">Find us on the map</span>
                       <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                          address,
-                        )}`}
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodedAddr}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-sm font-semibold text-white px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 transition-colors"

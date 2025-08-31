@@ -1,19 +1,21 @@
 // app/(app)/search/page.tsx
 import Image from 'next/image'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
-type SearchPageProps = {
-  searchParams?: { q?: string }
-}
+type SearchParams = { q?: string }
 
-export default async function SearchPage({ searchParams }: SearchPageProps) {
-  const q = (searchParams?.q ?? '').trim()
-  if (!q) {
+export default async function SearchPage(
+  props: { searchParams?: Promise<SearchParams> }
+) {
+  const { q = '' } = (await props.searchParams) ?? {}
+  const query = q.trim()
+
+  if (!query) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <div className="container mx-auto px-4 py-10">
@@ -30,19 +32,17 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 
   const payload = await getPayload({ config })
 
-  // Basic "LIKE" search across common fields.
-  // (Payload supports 'like' for partial matches; adjust as your schema evolves.)
   const res = await payload.find({
     collection: 'products' as any,
     depth: 1,
     limit: 48,
     where: {
       or: [
-        { name: { like: q } },
-        { description: { like: q } },
-        { tags: { like: q } },       // works if your tags are strings
-        { slug: { like: q } },
-        { category: { equals: q.toLowerCase() } },
+        { name: { like: query } },
+        { description: { like: query } },
+        { tags: { like: query } },
+        { slug: { like: query } },
+        { category: { equals: query.toLowerCase() } },
       ],
     },
     sort: 'name',
@@ -54,7 +54,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <div className="container mx-auto px-4 py-10">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2">
-          Results for “{q}”
+          Results for “{query}”
         </h1>
         <p className="text-gray-600 dark:text-gray-300 mb-6">
           {items.length} {items.length === 1 ? 'item' : 'items'} found

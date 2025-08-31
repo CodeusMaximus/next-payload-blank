@@ -1,3 +1,4 @@
+ // app/(app)/deli/[id]/page.tsx
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import Image from 'next/image'
@@ -7,25 +8,25 @@ import { ArrowLeft, Scale } from 'lucide-react'
 import DeliPurchase from './purchase-client'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
-interface PageProps {
-  params: { id: string }
-}
+type Params = { id: string }
 
-export default async function DeliDetailPage({ params }: PageProps) {
+export default async function DeliDetailPage(
+  props: { params: Promise<Params> }
+) {
+  const { id } = await props.params
+
   const payload = await getPayload({ config })
-  const { id } = params
 
   let doc: any | null = null
   try {
-    // Try by document ID
     doc = await payload.findByID({
       collection: 'deli' as any,
       id,
       depth: 2,
     })
   } catch {
-    // Fallback to slug
     const res = await payload.find({
       collection: 'deli' as any,
       where: { slug: { equals: id } },
@@ -117,7 +118,6 @@ export default async function DeliDetailPage({ params }: PageProps) {
                 </div>
               )}
 
-              {/* Client-side weight/qty + AddToCart */}
               <DeliPurchase doc={doc} imageUrl={imageUrl} />
             </div>
           </div>

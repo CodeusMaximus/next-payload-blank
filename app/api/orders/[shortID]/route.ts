@@ -1,10 +1,12 @@
 // app/api/orders/[shortId]/route.ts
 import { NextResponse } from 'next/server'
-import { getPayloadHMR } from '@payloadcms/next/utilities'
+import { getPayload } from 'payload'
 import config from '@payload-config'
-import { pusherServer } from '../../../lib/pusher/server' // keep your relative path or alias
-import { auth } from '@clerk/nextjs/server'               // ✅ correct server import
+import { pusherServer } from '../../../lib/pusher/server'
+import { auth } from '@clerk/nextjs/server'
 import { sendOrderConfirmedEmail, sendOrderConfirmedSMS } from '../../../lib/notify'
+
+export const runtime = 'nodejs'
 
 const STATUS_TO_TIMESTAMP_FIELD: Record<string, string | null> = {
   received: null,
@@ -16,7 +18,6 @@ const STATUS_TO_TIMESTAMP_FIELD: Record<string, string | null> = {
   canceled: null,
 }
 
-// Temporary local type to satisfy TS until payload-types are regenerated
 type OrderDoc = {
   id: string
   shortId: string
@@ -36,26 +37,19 @@ type OrderDoc = {
 
 export async function PATCH(
   req: Request,
-  { params }: { params: { shortId: string } }
+  ctx: { params: Promise<{ shortId: string }> }   // 👈 async params
 ) {
-  // ✅ Fixed: await the auth() call
+  const { shortId } = await ctx.params              // 👈 await them
+
   const { userId, sessionClaims } = await auth()
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Read role from session claims (set via Clerk publicMetadata on the user)
   const role =
-    // prefer publicMetadata (most common)
     (sessionClaims?.publicMetadata as any)?.role ??
-    // fallback just-in-case some setups use top-level metadata
     (sessionClaims as any)?.metadata?.role
+  if (role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  if (role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
-  const payload = await getPayloadHMR({ config })
+  const payload = await getPayload({ config })
   const { status } = await req.json()
 
   const allowed = [
@@ -67,35 +61,31 @@ export async function PATCH(
     'completed',
     'canceled',
   ] as const
-
   if (!allowed.includes(status)) {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
   }
 
   // Find by shortId
   const res = (await payload.find({
-    collection: 'orders' as any, // remove `as any` after you regenerate payload types
-    where: { shortId: { equals: params.shortId } },
+    collection: 'orders' as any,
+    where: { shortId: { equals: shortId } },
     limit: 1,
   })) as unknown as { docs: OrderDoc[] }
 
   const order = res.docs?.[0]
-  if (!order) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  }
+  if (!order) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Build update payload
+  // Build update
   const data: Partial<OrderDoc> & Record<string, any> = { status }
-  const timestampField = STATUS_TO_TIMESTAMP_FIELD[status]
-  if (timestampField) data[timestampField] = new Date().toISOString()
+  const tsField = STATUS_TO_TIMESTAMP_FIELD[status]
+  if (tsField) data[tsField] = new Date().toISOString()
 
   const updated = (await payload.update({
-    collection: 'orders' as any, // remove `as any` after you regenerate payload types
+    collection: 'orders' as any,
     id: order.id,
     data,
   })) as unknown as OrderDoc
 
-  // Broadcast to admin board and customer tracker
   await Promise.all([
     pusherServer.trigger('orders', 'order:update', {
       id: updated.id,
@@ -107,7 +97,6 @@ export async function PATCH(
     }),
   ])
 
-  // On confirm, notify via email/SMS
   if (status === 'confirmed') {
     await Promise.allSettled([
       sendOrderConfirmedEmail(updated.email, updated.name, updated.shortId),

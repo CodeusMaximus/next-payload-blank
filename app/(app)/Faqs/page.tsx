@@ -1,5 +1,6 @@
- 'use client'
+'use client'
 
+import * as React from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 
@@ -22,11 +23,11 @@ const CATEGORY_LABEL: Record<NonNullable<FAQ['category']>, string> = {
 
 /* ---------- Lexical/Slate-safe renderer helpers ---------- */
 
-function isLexical(obj: any) {
-  return obj && typeof obj === 'object' && obj.root && Array.isArray(obj.root.children)
+function isLexical(obj: any): obj is { root: { children: any[] } } {
+  return !!obj && typeof obj === 'object' && obj.root && Array.isArray(obj.root.children)
 }
 
-function isSlateBlocks(arr: any) {
+function isSlateBlocks(arr: any): arr is { children?: any[]; text?: string }[] {
   return Array.isArray(arr) && arr.length > 0 && typeof arr[0] === 'object' && 'children' in arr[0]
 }
 
@@ -36,6 +37,23 @@ function textFromNode(node: any): string {
   if (node.text) return node.text
   if (Array.isArray(node.children)) return node.children.map(textFromNode).join('')
   return ''
+}
+
+function parseHeadingLevel(n: any): 1 | 2 | 3 | 4 | 5 | 6 {
+  let lvl = 3
+  if (typeof n.tag === 'string') {
+    const m = n.tag.match(/^h([1-6])$/i)
+    if (m) lvl = Number(m[1])
+  }
+  if (typeof n.type === 'string') {
+    const m = n.type.match(/^heading([1-6])$/)
+    if (m) lvl = Number(m[1])
+  }
+  if (typeof n.tag === 'number') {
+    lvl = n.tag
+  }
+  lvl = Math.min(6, Math.max(1, lvl))
+  return (lvl as unknown) as 1 | 2 | 3 | 4 | 5 | 6
 }
 
 function renderLexicalChildren(children: any[], keyPrefix = '') {
@@ -48,16 +66,16 @@ function renderLexicalChildren(children: any[], keyPrefix = '') {
     }
 
     // Headings
-    if (n.type?.startsWith('heading')) {
-      const level = n.tag || n.type.replace('heading', '') || 3
-      const Tag = (`h${level}` as unknown) as keyof JSX.IntrinsicElements
-      return <Tag key={key}>{textFromNode(n)}</Tag>
+    if (typeof n.type === 'string' && n.type.startsWith('heading')) {
+      const lvl = parseHeadingLevel(n)
+      const headingTag = (['h1','h2','h3','h4','h5','h6'][lvl - 1]) as 'h1'|'h2'|'h3'|'h4'|'h5'|'h6'
+      return React.createElement(headingTag, { key }, textFromNode(n))
     }
 
     // Lists
     if (n.type === 'list') {
       const isOrdered = n.listType === 'number' || n.tag === 'ol'
-      const Tag = (isOrdered ? 'ol' : 'ul') as 'ol' | 'ul'
+      const Tag: 'ol' | 'ul' = isOrdered ? 'ol' : 'ul'
       return (
         <Tag key={key} className="list-inside ml-5">
           {(n.children || []).map((li: any, j: number) => (
@@ -67,7 +85,7 @@ function renderLexicalChildren(children: any[], keyPrefix = '') {
       )
     }
 
-    // Links (may appear either as node or inside children)
+    // Links (node-level)
     if (n.type === 'link') {
       const url = n.url || n.fields?.url
       return (
@@ -79,7 +97,7 @@ function renderLexicalChildren(children: any[], keyPrefix = '') {
       )
     }
 
-    // Fallback: just dump text
+    // Fallback
     return <p key={key}>{textFromNode(n)}</p>
   })
 }
@@ -100,7 +118,7 @@ function renderAnswer(answer: any) {
     return renderLexicalChildren(answer.root.children, 'lex-')
   }
 
-  // 4) Sometimes Payload returns {root:{children:[]}} but empty
+  // 4) Empty lexical root
   if (answer && typeof answer === 'object' && answer.root && Array.isArray(answer.root.children) && answer.root.children.length === 0) {
     return <p>—</p>
   }

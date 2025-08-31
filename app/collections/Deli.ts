@@ -1,4 +1,4 @@
- // collections/Deli.ts
+// collections/Deli.ts
 import type { CollectionConfig } from 'payload'
 
 type AnyData = Record<string, any>
@@ -8,10 +8,10 @@ const WEIGHT_OPTIONS: { label: string; value: string }[] = Array.from(
   (_, i) => {
     const val = 0.25 * (i + 1) // 0.25..3.0
     return {
-      label: `${val % 1 === 0 ? val.toFixed(0) : val.toFixed(2)} lb`,
+      label: `${Number.isInteger(val) ? val.toFixed(0) : val.toFixed(2)} lb`,
       value: val.toString(),
     }
-  }
+  },
 )
 
 const DELI_WEIGHT_CATS = new Set<string>(['cold-cuts', 'cheese'])
@@ -75,6 +75,7 @@ const Deli: CollectionConfig = {
       type: 'number',
       required: true,
       admin: {
+        // hidden for weight-based items
         condition: (data?: AnyData) => !data?.soldByWeight,
         description: 'Unit price (hidden if item is sold by weight).',
       },
@@ -115,7 +116,9 @@ const Deli: CollectionConfig = {
       name: 'madeToOrder',
       type: 'checkbox',
       defaultValue: true,
-      admin: { description: 'If true, customers can customize (bread, toppings, etc.).' },
+      admin: {
+        description: 'If true, customers can customize (bread, toppings, etc.).',
+      },
     },
 
     {
@@ -148,14 +151,19 @@ const Deli: CollectionConfig = {
   hooks: {
     beforeValidate: [
       ({ data }: { data?: AnyData }) => {
-        if (data?.name && !data.slug) {
+        // Defensive guard — if no data, just return
+        if (!data) return data
+
+        // Slugify name if missing slug
+        if (data.name && !data.slug) {
           data.slug = String(data.name)
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/(^-|-$)+/g, '')
         }
 
-        if (data?.category) {
+        // Auto-toggle soldByWeight based on category when not explicitly set
+        if (data.category) {
           if (DELI_WEIGHT_CATS.has(data.category)) {
             if (typeof data.soldByWeight === 'undefined') data.soldByWeight = true
           } else {
@@ -163,7 +171,8 @@ const Deli: CollectionConfig = {
           }
         }
 
-        if (!data?.soldByWeight) {
+        // If NOT sold by weight, remove weight-only fields
+        if (!data.soldByWeight) {
           delete data.pricePerLb
           delete data.allowedWeights
         }

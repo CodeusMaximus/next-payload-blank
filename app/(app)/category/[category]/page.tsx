@@ -7,103 +7,95 @@ import { ArrowLeft, Filter, SortAsc } from 'lucide-react';
 import CategoryProductGrid from './CategoryProductGrid';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
-interface CategoryPageProps {
-  params: {
-    category: string;
-  };
-}
+type Params = { category: string };
 
-// Category display names mapping
+// Map URL slugs to display names
 const categoryDisplayNames: Record<string, string> = {
-  'dairy': 'Dairy Products',
-  'drinks': 'Beverages',
-  'frozen': 'Frozen Foods',
-  'deli': 'Deli',
-  'produce': 'Fresh Produce',
-  'meat': 'Fresh Meat',
-  'bakery': 'Bakery',
-  'alcohol': 'Wine & Spirits',
-  'seafood': 'Fresh Seafood',
-  'bread': 'Fresh Bread',
-  'coffee': 'Coffee & Tea',
-  'vegetables': 'Fresh Vegetables',
-  'fruits': 'Fresh Fruits',
-  'cheese': 'Cheese',
-  'breakfast': 'Breakfast Items',
+  dairy: 'Dairy Products',
+  drinks: 'Beverages',
+  frozen: 'Frozen Foods',
+  deli: 'Deli',
+  produce: 'Fresh Produce',
+  meat: 'Fresh Meat',
+  bakery: 'Bakery',
+  alcohol: 'Wine & Spirits',
+  seafood: 'Fresh Seafood',
+  bread: 'Fresh Bread',
+  coffee: 'Coffee & Tea',
+  vegetables: 'Fresh Vegetables',
+  fruits: 'Fresh Fruits',
+  cheese: 'Cheese',
+  breakfast: 'Breakfast Items',
   'hot-food': 'Hot Prepared Foods',
   'cold-food': 'Cold Prepared Foods',
-  'sandwiches': 'Sandwiches',
-  'salads': 'Fresh Salads',
-  'soups': 'Soups',
-  'pizza': 'Pizza',
-  'snacks': 'Snacks',
-  'candy': 'Candy & Sweets',
-  'desserts': 'Desserts',
-  'energy': 'Energy Drinks',
-  'health': 'Health Foods',
-  'organic': 'Organic Products',
-  'personal': 'Personal Care',
-  'pharmacy': 'Pharmacy',
-  'baby': 'Baby Items',
-  'pet': 'Pet Supplies',
-  'household': 'Household Items',
-  'flowers': 'Fresh Flowers',
+  sandwiches: 'Sandwiches',
+  salads: 'Fresh Salads',
+  soups: 'Soups',
+  pizza: 'Pizza',
+  snacks: 'Snacks',
+  candy: 'Candy & Sweets',
+  desserts: 'Desserts',
+  energy: 'Energy Drinks',
+  health: 'Health Foods',
+  organic: 'Organic Products',
+  personal: 'Personal Care',
+  pharmacy: 'Pharmacy',
+  baby: 'Baby Items',
+  pet: 'Pet Supplies',
+  household: 'Household Items',
+  flowers: 'Fresh Flowers',
   'ice-cream': 'Ice Cream',
-  'soda': 'Soda',
-  'chips': 'Chips & Snacks',
+  soda: 'Soda',
+  chips: 'Chips & Snacks',
   'paper-plastic': 'Paper & Plastic',
 };
 
-export default async function CategoryPage({ params }: CategoryPageProps) {
+export default async function CategoryPage(
+  props: { params: Promise<Params> }
+) {
+  const { category } = await props.params;
+
   const payload = await getPayload({ config });
-  
-  // Await params in newer Next.js versions
-  const { category } = await params;
 
   try {
-    // Fetch products for this category
     const products = await payload.find({
       collection: 'products' as any,
-      where: {
-        category: { equals: category }
-      },
+      where: { category: { equals: category } },
       depth: 2,
-      limit: 100, // Adjust as needed
+      limit: 100,
       sort: '-updatedAt',
     });
 
     const productList = products.docs || [];
-    
-    // Get category display name
-    const categoryName = categoryDisplayNames[category] || category.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const categoryName =
+      categoryDisplayNames[category] ||
+      category.replace('-', ' ').replace(/\b\w/g, (l) => l.toUpperCase());
 
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
         <div className="container mx-auto px-4 py-8">
-          {/* Header */}
           <div className="mb-8">
-            {/* Back Button */}
-            <Link 
-              href="/" 
+            <Link
+              href="/"
               className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-6 transition-colors"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to Shop
             </Link>
 
-            {/* Page Title */}
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white">
                   {categoryName}
                 </h1>
                 <p className="text-gray-600 dark:text-gray-400 mt-2">
-                  {productList.length} {productList.length === 1 ? 'product' : 'products'} available
+                  {productList.length}{' '}
+                  {productList.length === 1 ? 'product' : 'products'} available
                 </p>
               </div>
 
-              {/* Filter & Sort Controls */}
               <div className="flex gap-2">
                 <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                   <Filter className="h-4 w-4" />
@@ -117,11 +109,9 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
             </div>
           </div>
 
-          {/* Products Grid */}
           {productList.length > 0 ? (
             <CategoryProductGrid products={productList} />
           ) : (
-            /* Empty State */
             <div className="text-center py-16">
               <div className="mb-4">
                 <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto flex items-center justify-center">
@@ -145,7 +135,6 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
         </div>
       </div>
     );
-
   } catch (error) {
     console.error('Error fetching category products:', error);
     notFound();

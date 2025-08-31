@@ -1,3 +1,4 @@
+// app/(app)/breakfastandlunch/[id]/page.tsx
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import Image from 'next/image'
@@ -7,17 +8,16 @@ import { ArrowLeft, Tag } from 'lucide-react'
 import AddToCartButton from '../../components/product/add-to-cart-button'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
 
-// Collection slug remains 'breakfast-dinner' even though the route is /breakfastandlunch
 const COLLECTION = 'breakfast-dinner'
 
-interface PageProps {
-  params: { id: string }
-}
+export default async function BreakfastLunchDetailPage(
+  props: { params: Promise<{ id: string }> }
+) {
+  const { id } = await props.params
 
-export default async function BreakfastLunchDetailPage({ params }: PageProps) {
   const payload = await getPayload({ config })
-  const { id } = params
 
   let doc: any | null = null
   try {
@@ -46,7 +46,6 @@ export default async function BreakfastLunchDetailPage({ params }: PageProps) {
   const displayPrice = onSale ? doc.salePrice : doc.price
   const originalPrice = onSale ? doc.price : null
 
-  // Product object for your AddToCartButton
   const productForCart: any = {
     id: doc.id,
     name: doc.name,
@@ -137,7 +136,6 @@ export default async function BreakfastLunchDetailPage({ params }: PageProps) {
                 </div>
               )}
 
-              {/* ✅ Your existing cart button */}
               <AddToCartButton product={productForCart} />
             </div>
           </div>
