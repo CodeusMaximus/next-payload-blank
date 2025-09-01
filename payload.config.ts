@@ -6,6 +6,7 @@ import sharp from 'sharp'
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { payloadCloudPlugin } from '@payloadcms/payload-cloud'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
+import { vercelBlobStorage } from '@payloadcms/storage-vercel-blob'
 
 // Use path mapping
 import { Orders } from './app/collections/Orders'
@@ -31,7 +32,7 @@ export default buildConfig({
       baseDir: path.resolve(dirname),
     },
   },
-  collections: [Users, Media, Pages, Posts, Orders, Products, HeroSlides,Deli, BreakfastDinner, FAQs],
+  collections: [Users, Media, Pages, Posts, Orders, Products, HeroSlides, Deli, BreakfastDinner, FAQs],
   globals: [Nav, Footer],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
@@ -44,5 +45,16 @@ export default buildConfig({
   sharp,
   plugins: [
     payloadCloudPlugin(),
+    // Add Vercel Blob Storage - only in production when token is available
+    ...(process.env.BLOB_READ_WRITE_TOKEN
+      ? [
+          vercelBlobStorage({
+            collections: { 
+              media: true  // This must match your Media collection slug
+            },
+            token: process.env.BLOB_READ_WRITE_TOKEN,
+          }),
+        ]
+      : []),
   ],
 })
