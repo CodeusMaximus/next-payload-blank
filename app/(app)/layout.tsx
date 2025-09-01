@@ -1,10 +1,15 @@
-// app/(app)/layout.tsx
+ // app/(app)/layout.tsx
 import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
+import './globals.css' // ✅ site styles only affect the (app) subtree
 import { Geist, Geist_Mono } from 'next/font/google'
-import './globals.css'
-import { getPayload } from 'payload'
+
+// payload helpers
+import { getPayload as getPayloadNode } from 'payload'
+import { getPayloadHMR } from '@payloadcms/next/utilities'
 import config from '@payload-config'
+
+// your app components/providers
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import Providers from './components/Providers'
@@ -16,15 +21,21 @@ export const metadata: Metadata = {
   description: 'Powered by Payload + Next',
 }
 
-export const dynamic = 'force-dynamic'
+export const dynamic = 'force-dynamic' // you fetch globals
 export const runtime = 'nodejs'
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
 
+// Use HMR in dev, node in prod
+const getPayloadSafe =
+  process.env.NODE_ENV === 'development'
+    ? () => getPayloadHMR({ config })
+    : () => getPayloadNode({ config })
+
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  const payload = await getPayload({ config })
-  const p: any = payload // 👈 loosen just this callsite
+  const payload = await getPayloadSafe()
+  const p: any = payload // loosen just here if your types are strict
 
   const [navData, footerData] = await Promise.all([
     p.findGlobal({ slug: 'nav', depth: 2 }),
