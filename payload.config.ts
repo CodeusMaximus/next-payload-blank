@@ -38,7 +38,8 @@ const VERCEL_ORIGIN = process.env.VERCEL_URL
 // CORS/CSRF origins
 const ORIGINS = [
   PUBLIC_URL,
-  'https://alpergrocery.com',  // Explicit production domain
+  'https://alpergrocery.com',      // Non-www version
+  'https://www.alpergrocery.com',  // WWW version - ADD THIS
   'http://localhost:3000',
   ...(VERCEL_ORIGIN ? [VERCEL_ORIGIN] : []),
 ]
