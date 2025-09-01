@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'www.alpergrocery.com' },
       { protocol: 'https', hostname: '**.vercel-storage.com' }, // Blob
     ],
+    // unoptimized: true, // (optional) flip on temporarily to debug image loading
   },
 }
 
