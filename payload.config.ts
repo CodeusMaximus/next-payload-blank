@@ -10,8 +10,8 @@ import { vercelBlobStorage } from '@payloadcms/storage-vercel-blob'
 
 // Collections / Globals
 import { Orders } from './app/collections/Orders'
-import { Users } from './app/collections/Users'          // ← see updated Users below
-import { Media } from './app/collections/Media'          // ← see updated Media below (slug MUST be 'media')
+import { Users } from './app/collections/Users'
+import { Media } from './app/collections/Media'
 import Pages from './app/collections/Pages'
 import Products from './app/collections/Products'
 import HeroSlides from './app/collections/HeroSlides'
@@ -25,41 +25,49 @@ import Deli from './app/collections/Deli'
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
-/** Single source of truth for your public origin */
-const PUBLIC_URL =
-  process.env.PAYLOAD_PUBLIC_SERVER_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  'http://localhost:3000'
+// Fixed: Use explicit domain for production
+const PUBLIC_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://alpergrocery.com'
+  : 'http://localhost:3000'
 
-/** Vercel Preview URL (added automatically in Preview deployments) */
+// Vercel Preview URL 
 const VERCEL_ORIGIN = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
   : undefined
 
-/** CORS/CSRF allow-list — keep these EXACT */
+// CORS/CSRF origins
 const ORIGINS = [
-  PUBLIC_URL,               // 👈 the domain you actually visit (e.g. https://alpergrocery.com)
+  PUBLIC_URL,
+  'https://alpergrocery.com',  // Explicit production domain
   'http://localhost:3000',
   ...(VERCEL_ORIGIN ? [VERCEL_ORIGIN] : []),
 ]
 
-/** Plugins (guard Blob so local/dev works without a token) */
+// Debug logging for production
+if (process.env.NODE_ENV === 'production') {
+  console.log('🔧 Payload Config Debug:')
+  console.log('PUBLIC_URL:', PUBLIC_URL)
+  console.log('ORIGINS:', ORIGINS)
+  console.log('DATABASE_URI present:', !!process.env.DATABASE_URI)
+  console.log('PAYLOAD_SECRET present:', !!process.env.PAYLOAD_SECRET)
+  console.log('BLOB_TOKEN present:', !!process.env.BLOB_READ_WRITE_TOKEN)
+}
+
 const plugins = [
   payloadCloudPlugin(),
   ...(process.env.BLOB_READ_WRITE_TOKEN
     ? [
         vercelBlobStorage({
-          collections: { media: true }, // 'media' MUST match your Media.slug
+          collections: { media: true },
           token: process.env.BLOB_READ_WRITE_TOKEN!,
-          // clientUploads: true, // enable if you want direct-from-browser uploads
         }),
       ]
     : []),
 ]
 
 export default buildConfig({
-  serverURL: PUBLIC_URL,     // ✅ critical for absolute media URLs
-
+  serverURL: PUBLIC_URL,
+  
   cors: ORIGINS,
   csrf: ORIGINS,
 
@@ -80,14 +88,19 @@ export default buildConfig({
     BreakfastDinner,
     FAQs,
   ],
+  
   globals: [Nav, Footer],
   editor: lexicalEditor(),
-  secret: process.env.PAYLOAD_SECRET || '',
-  typescript: { outputFile: path.resolve(dirname, 'payload-types.ts') },
+  
+  // Make sure this is set properly
+  secret: process.env.PAYLOAD_SECRET!,
+  
+  typescript: { 
+    outputFile: path.resolve(dirname, 'payload-types.ts') 
+  },
 
   db: mongooseAdapter({
-    // Support either env name; set one in Vercel
-    url: process.env.DATABASE_URI || process.env.DATABASE_URL || '',
+    url: process.env.DATABASE_URI || '',
   }),
 
   sharp,
