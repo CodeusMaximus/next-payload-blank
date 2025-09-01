@@ -1,5 +1,7 @@
  // app/(app)/layout.tsx
-import type { ReactNode } from 'react'
+
+import 'keen-slider/keen-slider.min.css'
+ import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
 import './globals.css' // ✅ site styles only affect the (app) subtree
 import { Geist, Geist_Mono } from 'next/font/google'
@@ -17,8 +19,8 @@ import { CartProvider } from '../lib/cart/cart-context'
 import CartSidebar from './components/cart/cart-sidebar'
 
 export const metadata: Metadata = {
-  title: 'My Site',
-  description: 'Powered by Payload + Next',
+  title: 'AlperGrocery.com',
+  description: 'The premiere grocery store of Staten Island',
 }
 
 export const dynamic = 'force-dynamic' // you fetch globals

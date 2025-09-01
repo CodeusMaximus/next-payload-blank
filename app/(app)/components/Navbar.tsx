@@ -1,4 +1,4 @@
- // components/Navbar.tsx
+// components/Navbar.tsx
 'use client'
 
 import Image from 'next/image'
@@ -33,11 +33,32 @@ type NavItem = {
 type NavData = { logo?: MediaDoc | string; links?: NavItem[] }
 type ContactInfo = { phone?: string; email?: string }
 
-function isExternal(href: string) {
-  return /^https?:\/\//i.test(href)
+/* ---------- URL helpers ---------- */
+
+/** Normalize internal relative paths like "category/dairy" -> "/category/dairy" */
+function normalizeInternal(href: string) {
+  if (!href) return href
+  const looksLikeProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(href) // e.g. http:, mailto:
+  if (!href.startsWith('/') && !looksLikeProtocol && !href.startsWith('//')) {
+    return '/' + href.replace(/^\/+/, '')
+  }
+  return href
 }
 
+/** Detect external links: http(s), protocol-relative, or starts with "www." */
+function isExternalUrl(href: string) {
+  return /^(https?:)?\/\//i.test(href) || /^www\./i.test(href)
+}
+
+/** Resolve the href for a child: explicit URL wins; otherwise derive from target/category */
 function childHref(_parent: NavItem, child: SubLink): string {
+  if (child.href && child.href.trim()) {
+    const raw = child.href.trim()
+    if (isExternalUrl(raw)) {
+      return raw.startsWith('http') ? raw : `https://${raw}`
+    }
+    return normalizeInternal(raw)
+  }
   if (child.target === 'products' && child.categoryKey) {
     return `/category/${encodeURIComponent(child.categoryKey)}`
   }
@@ -47,7 +68,12 @@ function childHref(_parent: NavItem, child: SubLink): string {
   if (child.target === 'breakfastandlunch' && child.categoryKey) {
     return `/breakfastandlunch?cat=${encodeURIComponent(child.categoryKey)}`
   }
-  return child.href || '#'
+  return '#'
+}
+
+/** Parent link external check */
+function isExternalParent(href?: string) {
+  return !!href && isExternalUrl(href)
 }
 
 export default function Navbar({
@@ -62,7 +88,7 @@ export default function Navbar({
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isOrderOpen, setIsOrderOpen] = useState(false)
-  const [query, setQuery] = useState('') // ✅ search query state
+  const [query, setQuery] = useState('')
 
   // Mobile dropdown control
   const [openMobileDropdown, setOpenMobileDropdown] = useState<number | null>(null)
@@ -105,12 +131,11 @@ export default function Navbar({
   const toggleMenu = () => setIsMenuOpen(v => !v)
   const toggleSearch = () => setIsSearchOpen(v => !v)
 
-  // ✅ Submit helper to navigate to /search?q=...
+  // Submit helper to navigate to /search?q=...
   function submitSearch() {
     const q = query.trim()
     if (!q) return
     router.push(`/search?q=${encodeURIComponent(q)}`)
-    // close any open UI
     setIsSearchOpen(false)
     setIsMenuOpen(false)
   }
@@ -166,7 +191,7 @@ export default function Navbar({
     }
 
     if (!hasChildren) {
-      const external = !!item.href && isExternal(item.href)
+      const external = isExternalParent(item.href)
       const baseClass =
         'relative text-white hover:text-red-400 transition-colors duration-300 group py-2'
       return item.href ? (
@@ -176,7 +201,7 @@ export default function Navbar({
             <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-red-500 transition-all duration-300 group-hover:w-full" />
           </a>
         ) : (
-          <Link key={idx} className={baseClass} href={item.href}>
+          <Link key={idx} className={baseClass} href={normalizeInternal(item.href)}>
             {item.label}
             <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-red-500 transition-all duration-300 group-hover:w-full" />
           </Link>
@@ -213,31 +238,49 @@ export default function Navbar({
           />
         </button>
 
+        {/* Improved desktop submenu */}
         <div
           className={`
             absolute left-0 top-full
-            min-w-[260px] rounded-xl bg-gray-900 border border-white/10 shadow-2xl z-[120]
-            transition-[opacity,transform] duration-150
+            z-[520] mt-2
+            min-w-[300px] rounded-xl bg-gray-900/95 backdrop-blur
+            border border-white/10 shadow-2xl
+            transition-[opacity,transform] duration-150 origin-top
             ${openDesktopDropdown === idx ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 -translate-y-1 pointer-events-none'}
           `}
           role="menu"
         >
-          <ul className="py-2">
-            {item.children!.map((c, i) => {
-              const href = childHref(item, c)
-              const external = isExternal(href) || c.openInNewTab
-              const common = 'block w-full text-left px-4 py-2 text-gray-200 hover:text-white hover:bg-white/5'
-              return external ? (
-                <a key={i} href={href} target="_blank" rel="noopener noreferrer" className={common} role="menuitem">
-                  {c.label}
-                </a>
-              ) : (
-                <Link key={i} href={href} className={common} role="menuitem">
-                  {c.label}
-                </Link>
-              )
-            })}
-          </ul>
+          <div className="p-2">
+            <ul
+              className="
+                grid gap-1
+                grid-cols-1 sm:grid-cols-2 lg:grid-cols-3
+              "
+            >
+              {item.children!.map((c, i) => {
+                const href = childHref(item, c)
+                const external = isExternalUrl(href) || c.openInNewTab
+                const common =
+                  'block w-full text-left px-3 py-2 rounded-lg text-gray-100 hover:bg-white/10 focus:bg-white/10 focus:outline-none'
+                return external ? (
+                  <a
+                    key={i}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={common}
+                    role="menuitem"
+                  >
+                    {c.label}
+                  </a>
+                ) : (
+                  <Link key={i} href={href} className={common} role="menuitem">
+                    {c.label}
+                  </Link>
+                )
+              })}
+            </ul>
+          </div>
         </div>
       </div>
     )
@@ -263,7 +306,7 @@ export default function Navbar({
             {navItems.map(renderTopItem)}
           </div>
 
-          {/* ✅ Search Bar - Desktop (navigates to /search?q=...) */}
+          {/* Search Bar - Desktop */}
           <form
             onSubmit={(e) => { e.preventDefault(); submitSearch() }}
             className="hidden md:flex items-center bg-gray-800 rounded-full px-4 py-2 flex-1 max-w-md mx-8"
@@ -306,7 +349,7 @@ export default function Navbar({
             )}
           </div>
 
-          {/* Mobile header actions (Search, Cart, Phone, Mail, Menu) */}
+          {/* Mobile header actions */}
           <div className="flex items-center gap-2 md:hidden">
             <button onClick={toggleSearch} className="p-2 hover:bg-gray-800 rounded-full" aria-label="Search">
               <Search className="h-6 w-6" />
@@ -331,7 +374,7 @@ export default function Navbar({
           </div>
         </div>
 
-        {/* ✅ Mobile Search Bar (also navigates to /search?q=...) */}
+        {/* Mobile Search Bar */}
         {isSearchOpen && (
           <div className="md:hidden py-4 border-t border-gray-700">
             <form
@@ -358,7 +401,7 @@ export default function Navbar({
       {isMenuOpen && (
         <div className="fixed inset-0 z-[700] md:hidden">
           <div className="absolute inset-0 flex flex-col">
-            {/* Header (blue/desktop-like) */}
+            {/* Header */}
             <div className="relative flex items-center justify-center px-5 h-16 bg-gray-900 text-white">
               {logoUrl ? (
                 <Image src={logoUrl} alt={logoAlt} width={120} height={48} className="w-auto" />
@@ -374,17 +417,23 @@ export default function Navbar({
               </button>
             </div>
 
-            {/* Body (white/red) */}
-            <div className="flex-1 bg-white text-red-700 flex flex-col">
+            {/* Body */}
+            <div className="flex-1 bg-white text-gray-900 flex flex-col">
               {/* Contact quick actions */}
-              <div className="flex gap-3 px-5 py-4 border-b border-red-200">
+              <div className="flex gap-3 px-5 py-4 border-b border-gray-200">
                 {phoneHref && (
-                  <a href={phoneHref} className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-red-200 hover:bg-red-50">
+                  <a
+                    href={phoneHref}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50"
+                  >
                     <Phone className="h-4 w-4" /> Call
                   </a>
                 )}
                 {mailHref && (
-                  <a href={mailHref} className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-red-200 hover:bg-red-50">
+                  <a
+                    href={mailHref}
+                    className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50"
+                  >
                     <Mail className="h-4 w-4" /> Email
                   </a>
                 )}
@@ -423,19 +472,36 @@ export default function Navbar({
                     }
 
                     if (!hasChildren) {
-                      const external = !!item.href && isExternal(item.href)
-                      const cls = 'block w-full text-center px-4 py-3 rounded-xl border border-red-200 text-red-800 hover:bg-red-50'
+                      const external = isExternalParent(item.href)
+                      const cls =
+                        'block w-full text-center px-4 py-3 rounded-xl border border-gray-200 text-gray-900 hover:bg-gray-50'
                       return item.href ? (
                         <li key={idx} className="text-center">
                           {external ? (
-                            <a href={item.href} className={cls} target="_blank" rel="noopener noreferrer" onClick={() => setIsMenuOpen(false)}>{item.label}</a>
+                            <a
+                              href={item.href}
+                              className={cls}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={() => setIsMenuOpen(false)}
+                            >
+                              {item.label}
+                            </a>
                           ) : (
-                            <Link href={item.href} className={cls} onClick={() => setIsMenuOpen(false)}>{item.label}</Link>
+                            <Link
+                              href={normalizeInternal(item.href)}
+                              className={cls}
+                              onClick={() => setIsMenuOpen(false)}
+                            >
+                              {item.label}
+                            </Link>
                           )}
                         </li>
                       ) : (
                         <li key={idx} className="text-center">
-                          <span className="block w-full text-center px-4 py-3 rounded-xl border border-red-100 text-red-400">{item.label}</span>
+                          <span className="block w-full text-center px-4 py-3 rounded-xl border border-gray-100 text-gray-400">
+                            {item.label}
+                          </span>
                         </li>
                       )
                     }
@@ -445,25 +511,43 @@ export default function Navbar({
                       <li key={idx} className="text-center">
                         <button
                           onClick={() => setOpenMobileDropdown(isOpen ? null : idx)}
-                          className="w-full px-4 py-3 rounded-xl border border-red-200 text-red-800 hover:bg-red-50 inline-flex items-center justify-center gap-2"
+                          className="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-900 hover:bg-gray-50 inline-flex items-center justify-center gap-2"
                         >
                           <span>{item.label}</span>
                           <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                         </button>
 
-                        <div className={`grid transition-all overflow-hidden ${isOpen ? 'grid-rows-[1fr] mt-2' : 'grid-rows-[0fr]'}`}>
+                        <div
+                          className={`grid transition-all overflow-hidden ${
+                            isOpen ? 'grid-rows-[1fr] mt-2' : 'grid-rows-[0fr]'
+                          }`}
+                        >
                           <div className="min-h-0">
                             <ul className="space-y-2 pt-1">
                               {item.children!.map((c, i) => {
                                 const href = childHref(item, c)
-                                const external = isExternal(href) || c.openInNewTab
-                                const childClass = 'block w-full text-center px-4 py-2 rounded-lg text-red-700 hover:bg-red-50'
+                                const external = isExternalUrl(href) || c.openInNewTab
+                                // BLUE buttons with white text (requested)
+                                const childBtn =
+                                  'block w-full text-center px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 active:bg-blue-800 transition'
                                 return external ? (
-                                  <a key={i} href={href} target="_blank" rel="noopener noreferrer" className={childClass} onClick={() => setIsMenuOpen(false)}>
+                                  <a
+                                    key={i}
+                                    href={href}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={childBtn}
+                                    onClick={() => setIsMenuOpen(false)}
+                                  >
                                     {c.label}
                                   </a>
                                 ) : (
-                                  <Link key={i} href={href} className={childClass} onClick={() => setIsMenuOpen(false)}>
+                                  <Link
+                                    key={i}
+                                    href={href}
+                                    className={childBtn}
+                                    onClick={() => setIsMenuOpen(false)}
+                                  >
                                     {c.label}
                                   </Link>
                                 )
@@ -478,13 +562,15 @@ export default function Navbar({
               </div>
 
               {/* Bottom row */}
-              <div className="px-5 py-4 border-t border-red-200 flex items-center justify-between">
+              <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-between">
                 <CartButton />
                 {isSignedIn ? (
                   <UserButton afterSignOutUrl="/" />
                 ) : (
                   <SignInButton mode="modal">
-                    <button className="px-3 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700">Sign in</button>
+                    <button className="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+                      Sign in
+                    </button>
                   </SignInButton>
                 )}
               </div>
