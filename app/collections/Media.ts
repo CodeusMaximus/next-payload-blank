@@ -9,15 +9,12 @@ export const Media: CollectionConfig = {
     defaultColumns: ['filename', 'mimeType', 'filesize', 'updatedAt'],
   },
   upload: {
-    // tell Payload this is an image collection; Blob adapter is wired via the plugin
-    mimeTypes: ['image/*'],
-    // generate smaller renditions automatically (keeps file sizes reasonable)
+    mimeTypes: ['image/*', 'video/*'], // ✅ Now allows both images and videos
     imageSizes: [
       { name: 'thumb', width: 320, height: 240, position: 'centre' },
       { name: 'card',  width: 800, height: 600, position: 'centre' },
     ],
-    disableLocalStorage: true, // critical on Vercel
-    // (do NOT add maxFileSize here—Payload v3 UploadConfig doesn’t have that prop)
+    disableLocalStorage: true,
   },
   fields: [
     { name: 'alt', type: 'text' },
