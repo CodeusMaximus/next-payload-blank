@@ -6,12 +6,12 @@ import sharp from 'sharp'
 import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { payloadCloudPlugin } from '@payloadcms/payload-cloud'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
-import { vercelBlobStorage } from '@payloadcms/storage-vercel-blob'
+import { vercelBlobStorage } from '@payloadcms/storage-vercel-blob' // 👈 ADD THIS
 
-// Collections / Globals
+// Use path mapping
 import { Orders } from './app/collections/Orders'
 import { Users } from './app/collections/Users'
-import { Media } from './app/collections/Media'   // slug must be 'media'
+import { Media } from './app/collections/Media'
 import Pages from './app/collections/Pages'
 import Products from './app/collections/Products'
 import HeroSlides from './app/collections/HeroSlides'
@@ -25,62 +25,36 @@ import Deli from './app/collections/Deli'
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 
-const PUBLIC_URL =
-  process.env.PAYLOAD_PUBLIC_SERVER_URL ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  'http://localhost:3000'
-
-// Allowed origins (prod + local). Keep this tight to avoid CSRF issues.
-const ORIGINS = [
-  PUBLIC_URL,
-  'http://localhost:3000',
-]
-
-// Guard Blob so missing token doesn’t break admin
-const plugins = [
-  payloadCloudPlugin(),
-  ...(process.env.BLOB_READ_WRITE_TOKEN
-    ? [
-        vercelBlobStorage({
-          collections: { media: true }, // MUST match Media.slug
-          token: process.env.BLOB_READ_WRITE_TOKEN!,
-          clientUploads: true,          // direct-to-Blob uploads (bypass 4.5MB limit)
-        }),
-      ]
-    : []),
-]
-
 export default buildConfig({
-  serverURL: PUBLIC_URL,
-  cors: ORIGINS,
-  csrf: ORIGINS,
-
   admin: {
     user: Users.slug,
-    importMap: { baseDir: path.resolve(dirname) },
+    importMap: {
+      baseDir: path.resolve(dirname),
+    },
   },
-
-  collections: [
-    Users,
-    Media,
-    Pages,
-    Posts,
-    Orders,
-    Products,
-    HeroSlides,
-    Deli,
-    BreakfastDinner,
-    FAQs,
-  ],
+  collections: [Users, Media, Pages, Posts, Orders, Products, HeroSlides, Deli, BreakfastDinner, FAQs],
   globals: [Nav, Footer],
   editor: lexicalEditor(),
   secret: process.env.PAYLOAD_SECRET || '',
-  typescript: { outputFile: path.resolve(dirname, 'payload-types.ts') },
-
+  typescript: {
+    outputFile: path.resolve(dirname, 'payload-types.ts'),
+  },
   db: mongooseAdapter({
     url: process.env.DATABASE_URI || '',
   }),
-
   sharp,
-  plugins,
+  plugins: [
+    payloadCloudPlugin(),
+
+    // 👇 ADD THIS (guarded so missing token won’t break admin)
+    ...(process.env.BLOB_READ_WRITE_TOKEN
+      ? [
+          vercelBlobStorage({
+            collections: { media: true },   // <-- MUST match Media.slug === 'media'
+            token: process.env.BLOB_READ_WRITE_TOKEN!,
+            clientUploads: true,            // direct-to-Blob; bypasses 4.5MB serverless limit
+          }),
+        ]
+      : []),
+  ],
 })
