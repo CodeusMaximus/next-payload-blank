@@ -25,23 +25,9 @@ export type SlideVM = {
 export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [videoLoading, setVideoLoading] = useState<boolean[]>(new Array(slides.length).fill(false));
+  const [videosPreloaded, setVideosPreloaded] = useState<boolean[]>(new Array(slides.length).fill(false));
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
-  
-  // Debug: Log the slides data
-  useEffect(() => {
-    console.log('Slides data received:', slides);
-    slides.forEach((slide, idx) => {
-      console.log(`Slide ${idx}:`, {
-        title: slide.title,
-        mediaType: slide.mediaType,
-        videoUrl: slide.videoUrl,
-        posterUrl: slide.posterUrl,
-        autoplay: slide.autoplay,
-        muted: slide.muted,
-        loop: slide.loop
-      });
-    });
-  }, [slides]);
   
   const setVideoRef = (idx: number) => (el: HTMLVideoElement | null) => {
     videoRefs.current[idx] = el;
@@ -58,60 +44,106 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
     }
   });
 
+  // Preload videos aggressively on component mount
+  useEffect(() => {
+    const preloadVideos = async () => {
+      slides.forEach((slide, idx) => {
+        if (slide.mediaType === 'video' && slide.videoUrl && idx < 3) {
+          // Create invisible video element to preload
+          const video = document.createElement('video');
+          video.src = slide.videoUrl;
+          video.preload = 'auto';
+          video.muted = true;
+          video.playsInline = true;
+          
+          video.addEventListener('loadeddata', () => {
+            setVideosPreloaded(prev => {
+              const newState = [...prev];
+              newState[idx] = true;
+              return newState;
+            });
+          });
+          
+          video.load(); // Start loading immediately
+        }
+      });
+    };
+
+    preloadVideos();
+  }, [slides]);
+
   // Handle video playback based on current slide
   useEffect(() => {
     if (!loaded) return;
-
-    console.log('Current slide changed to:', currentSlide);
-    console.log('Video refs:', videoRefs.current);
 
     videoRefs.current.forEach((video, index) => {
       if (!video) return;
       
       const slide = slides[index];
-      console.log(`Processing video ${index}, current slide: ${currentSlide}`);
-      console.log(`Video ${index} src:`, video.src);
-      console.log(`Video ${index} readyState:`, video.readyState);
-      console.log(`Video ${index} networkState:`, video.networkState);
       
       if (index === currentSlide) {
         // Play current slide video
         if (slide?.autoplay) {
-          console.log(`Playing video ${index}`);
-          video.currentTime = 0; // Restart from beginning
-          video.load(); // Force reload the video source
-          video.play().catch((error) => {
-            console.log('Autoplay prevented for slide', index, error);
-          });
+          // Check if video is ready to play
+          const playWhenReady = () => {
+            if (video.readyState >= 3) { // HAVE_FUTURE_DATA or better
+              video.currentTime = 0;
+              video.play().catch((error) => {
+                console.log('Autoplay prevented for slide', index, error);
+              });
+            } else {
+              // Wait a bit and try again
+              setTimeout(playWhenReady, 100);
+            }
+          };
+          
+          playWhenReady();
         }
       } else {
         // Pause and reset other videos
-        console.log(`Pausing video ${index}`);
         video.pause();
         video.currentTime = 0;
       }
     });
   }, [currentSlide, loaded, slides]);
 
-  // Auto-advance slides
+  // Auto-advance slides with longer duration for video slides
   useEffect(() => {
     if (!slider.current) return;
     
+    const currentSlideData = slides[currentSlide];
+    const duration = currentSlideData?.mediaType === 'video' ? 6000 : 4000; // Longer for videos
+    
     const interval = setInterval(() => {
-      console.log('Auto-advancing slide');
       slider.current?.next();
-    }, 4000);
+    }, duration);
     
     setLoaded(true);
     return () => clearInterval(interval);
-  }, [slider]);
+  }, [slider, currentSlide, slides]);
+
+  const handleVideoLoadStart = (idx: number) => {
+    setVideoLoading(prev => {
+      const newState = [...prev];
+      newState[idx] = true;
+      return newState;
+    });
+  };
+
+  const handleVideoCanPlay = (idx: number) => {
+    setVideoLoading(prev => {
+      const newState = [...prev];
+      newState[idx] = false;
+      return newState;
+    });
+  };
 
   if (!slides.length) return null;
 
   return (
     <div
       ref={sliderRef}
-      className={`keen-slider h-[100dvh] w-screen relative overflow-hidden transition-opacity duration-500 ${
+      className={`keen-slider h-[100dvh] w-screen relative overflow-hidden transition-opacity duration-300 ${
         loaded ? 'opacity-100' : 'opacity-0'
       }`}
     >
@@ -120,49 +152,64 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
           {/* Background layer: image OR video */}
           <div className="absolute inset-0 z-0">
             {slide.mediaType === 'video' && slide.videoUrl ? (
-              <video
-                ref={setVideoRef(idx)}
-                className="h-full w-full object-cover"
-                src={slide.videoUrl}
-                poster={slide.posterUrl}
-                autoPlay={false} // We'll control this manually
-                loop={slide.loop}
-                muted={slide.muted}
-                playsInline
-                controls={slide.controls}
-                preload="metadata"
-                onLoadedData={() => console.log(`Video ${idx} loaded`)}
-                onCanPlay={() => console.log(`Video ${idx} can play`)}
-              />
+              <>
+                <video
+                  ref={setVideoRef(idx)}
+                  className="h-full w-full object-cover"
+                  src={slide.videoUrl}
+                  poster={slide.posterUrl}
+                  autoPlay={false} // We'll control this manually
+                  loop={slide.loop}
+                  muted={slide.muted}
+                  playsInline
+                  controls={slide.controls}
+                  preload={idx < 3 ? "auto" : "metadata"} // Aggressive preload for first 3 videos
+                  onLoadStart={() => handleVideoLoadStart(idx)}
+                  onCanPlay={() => handleVideoCanPlay(idx)}
+                  onLoadedData={() => console.log(`Video ${idx} loaded`)}
+                />
+                
+                {/* Loading overlay for videos */}
+                {videoLoading[idx] && (
+                  <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-5">
+                    <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                )}
+              </>
             ) : (
               slide.imageUrl && (
                 <Image
                   src={slide.imageUrl}
                   alt={slide.imageAlt || slide.title || 'Hero'}
                   fill
-                  priority={idx === 0}
+                  priority={idx === 0} // Priority for first image
                   quality={90}
+                  sizes="100vw"
                   className="object-cover"
                 />
               )
             )}
+            
+            {/* Dark overlay */}
             <div className="absolute inset-0 bg-black/40" />
           </div>
 
           {/* Foreground content */}
           <div className="relative z-10 flex flex-col justify-center items-center h-full text-center px-4">
             {!!slide.title && (
-              <h1 className="text-4xl md:text-5xl font-bold text-white drop-shadow-lg mb-4">
+              <h1 className="text-4xl md:text-5xl font-bold text-white drop-shadow-lg mb-4 animate-fade-in">
                 {slide.title}
               </h1>
             )}
             {!!slide.subtitle && (
-              <p className="text-lg md:text-xl text-white drop-shadow mb-6">{slide.subtitle}</p>
+              <p className="text-lg md:text-xl text-white drop-shadow mb-6 animate-fade-in animation-delay-200">
+                {slide.subtitle}
+              </p>
             )}
             {slide.ctaLabel && slide.ctaLink && (
               <Link
                 href={slide.ctaLink}
-                className="inline-flex items-center gap-2 bg-pink-600 hover:bg-pink-700 text-white font-semibold py-3 px-6 rounded-full text-sm md:text-base transition-all duration-300 shadow-lg hover:scale-105"
+                className="inline-flex items-center gap-2 bg-pink-600 hover:bg-pink-700 text-white font-semibold py-3 px-6 rounded-full text-sm md:text-base transition-all duration-300 shadow-lg hover:scale-105 animate-fade-in animation-delay-400"
               >
                 <span>{slide.ctaLabel}</span>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -171,8 +218,54 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
               </Link>
             )}
           </div>
+
+          {/* Slide indicator */}
+          <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-20">
+            <div className="flex space-x-2">
+              {slides.map((_, slideIdx) => (
+                <button
+                  key={slideIdx}
+                  onClick={() => slider.current?.moveToIdx(slideIdx)}
+                  className={`w-3 h-3 rounded-full transition-all duration-300 ${
+                    slideIdx === currentSlide
+                      ? 'bg-white scale-110'
+                      : 'bg-white/50 hover:bg-white/75'
+                  }`}
+                  aria-label={`Go to slide ${slideIdx + 1}`}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       ))}
+      
+      {/* Custom CSS for animations */}
+      <style jsx>{`
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+            transform: translateY(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        .animate-fade-in {
+          animation: fade-in 0.8s ease-out forwards;
+        }
+        
+        .animation-delay-200 {
+          animation-delay: 0.2s;
+          opacity: 0;
+        }
+        
+        .animation-delay-400 {
+          animation-delay: 0.4s;
+          opacity: 0;
+        }
+      `}</style>
     </div>
   );
 }
