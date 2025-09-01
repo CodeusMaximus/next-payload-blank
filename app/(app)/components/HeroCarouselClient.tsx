@@ -22,23 +22,12 @@ export type SlideVM = {
   controls?: boolean;
 };
 
-function playWhenReady(v: HTMLVideoElement) {
-  if (v.readyState >= 3 /* HAVE_FUTURE_DATA */) {
-    v.play().catch(() => {});
-  } else {
-    const onCanPlay = () => {
-      v.removeEventListener('canplay', onCanPlay);
-      v.play().catch(() => {});
-    };
-    v.addEventListener('canplay', onCanPlay, { once: true });
-  }
-}
-
 export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
-
+  
+  // Debug: Log the slides data
   useEffect(() => {
     console.log('Slides data received:', slides);
     slides.forEach((slide, idx) => {
@@ -49,65 +38,71 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
         posterUrl: slide.posterUrl,
         autoplay: slide.autoplay,
         muted: slide.muted,
-        loop: slide.loop,
+        loop: slide.loop
       });
     });
   }, [slides]);
-
+  
   const setVideoRef = (idx: number) => (el: HTMLVideoElement | null) => {
     videoRefs.current[idx] = el;
   };
-
+  
   const [sliderRef, slider] = useKeenSlider<HTMLDivElement>({
     loop: true,
     slides: { perView: 1 },
-    renderMode: 'performance',
     slideChanged: (s) => {
       setCurrentSlide(s.track.details.rel);
     },
     created: () => {
       setCurrentSlide(0);
-      // start first video if present
-      const v0 = videoRefs.current[0];
-      if (v0) {
-        if (!v0.muted) v0.muted = true; // ensure autoplay OK on mobile
-        playWhenReady(v0);
-      }
-      setLoaded(true); // trigger fade-in after slider is ready
-    },
+    }
   });
 
   // Handle video playback based on current slide
   useEffect(() => {
     if (!loaded) return;
 
+    console.log('Current slide changed to:', currentSlide);
+    console.log('Video refs:', videoRefs.current);
+
     videoRefs.current.forEach((video, index) => {
       if (!video) return;
+      
+      const slide = slides[index];
+      console.log(`Processing video ${index}, current slide: ${currentSlide}`);
+      console.log(`Video ${index} src:`, video.src);
+      console.log(`Video ${index} readyState:`, video.readyState);
+      console.log(`Video ${index} networkState:`, video.networkState);
+      
       if (index === currentSlide) {
-        // play active slide if configured
-        const slide = slides[index];
-        if (slide?.mediaType === 'video' && slide.autoplay) {
-          if (!video.muted) video.muted = true;
-          playWhenReady(video);
+        // Play current slide video
+        if (slide?.autoplay) {
+          console.log(`Playing video ${index}`);
+          video.currentTime = 0; // Restart from beginning
+          video.load(); // Force reload the video source
+          video.play().catch((error) => {
+            console.log('Autoplay prevented for slide', index, error);
+          });
         }
       } else {
-        // pause others, but keep their buffer (no load/seek resets)
-        if (!video.paused) video.pause();
+        // Pause and reset other videos
+        console.log(`Pausing video ${index}`);
+        video.pause();
+        video.currentTime = 0;
       }
     });
-
-    // pre-warm the NEXT slide's video so it starts instantly
-    const nextIdx = (currentSlide + 1) % slides.length;
-    const next = videoRefs.current[nextIdx];
-    if (next) next.preload = 'auto';
   }, [currentSlide, loaded, slides]);
 
   // Auto-advance slides
   useEffect(() => {
     if (!slider.current) return;
+    
     const interval = setInterval(() => {
+      console.log('Auto-advancing slide');
       slider.current?.next();
     }, 4000);
+    
+    setLoaded(true);
     return () => clearInterval(interval);
   }, [slider]);
 
@@ -130,12 +125,11 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
                 className="h-full w-full object-cover"
                 src={slide.videoUrl}
                 poster={slide.posterUrl}
-                // controlled in effects
-                autoPlay={false}
-                loop={!!slide.loop}
-                muted={slide.muted ?? true}
+                autoPlay={false} // We'll control this manually
+                loop={slide.loop}
+                muted={slide.muted}
                 playsInline
-                controls={!!slide.controls}
+                controls={slide.controls}
                 preload="metadata"
                 onLoadedData={() => console.log(`Video ${idx} loaded`)}
                 onCanPlay={() => console.log(`Video ${idx} can play`)}
@@ -171,13 +165,7 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
                 className="inline-flex items-center gap-2 bg-pink-600 hover:bg-pink-700 text-white font-semibold py-3 px-6 rounded-full text-sm md:text-base transition-all duration-300 shadow-lg hover:scale-105"
               >
                 <span>{slide.ctaLabel}</span>
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  viewBox="0 0 24 24"
-                >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
               </Link>
