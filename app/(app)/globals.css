@@ -27,4 +27,11 @@ body {
 /* globals.css */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+/* put at the very end of globals.css */
+/* Admin has a #portal div; use it to detect and neutralize. */
+body:has(#portal) {
+  color: initial;
+  background: initial;
+}
+
 
