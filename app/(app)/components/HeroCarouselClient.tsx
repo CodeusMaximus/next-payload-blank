@@ -139,6 +139,7 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
       });
     };
 
+    // Start preloading immediately on desktop
     preloadVideos();
   }, [slides, isMobile]);
 
@@ -190,7 +191,7 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
           
           // Check if video is ready to play
           const playWhenReady = () => {
-            if (video.readyState >= 2) { // HAVE_CURRENT_DATA or better
+            if (video.readyState >= 2) { // HAVE_CURRENT_DATA or better (lower threshold for mobile)
               video.currentTime = 0;
               video.play().catch((error) => {
                 console.log(`Autoplay failed for slide ${index}:`, error);
@@ -199,9 +200,9 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
                   console.log(`Falling back to poster image for slide ${index}`);
                 }
               });
-            } else if (!isMobile || video.readyState > 0) {
-              // Retry on desktop, or on mobile if we have some data
-              setTimeout(playWhenReady, isMobile ? 200 : 100);
+            } else if (!isMobile) {
+              // Only retry on desktop
+              setTimeout(playWhenReady, 100);
             }
           };
           

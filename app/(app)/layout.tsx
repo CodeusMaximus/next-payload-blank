@@ -17,6 +17,8 @@ import Footer from './components/Footer'
 import Providers from './components/Providers'
 import { CartProvider } from '../lib/cart/cart-context'
 import CartSidebar from './components/cart/cart-sidebar'
+import GlobalSplash from '../(app)/components/ui/GlobalSplash' // <-- add this import
+
 
 export const metadata: Metadata = {
   title: 'AlperGrocery.com',
@@ -47,6 +49,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className="scroll-smooth">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen flex flex-col`}>
+        <GlobalSplash />
         <CartProvider>
           <Providers>
             <Navbar data={navData} />
