@@ -116,32 +116,77 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
   useEffect(() => {
     if (isMobile) return; // Skip preloading on mobile
 
-    const preloadVideos = async () => {
+    const preloadVideos = () => {
       slides.forEach((slide, idx) => {
         if (slide.mediaType === 'video' && slide.videoUrl && idx < 3) {
           // Create invisible video element to preload
           const video = document.createElement('video');
-          video.src = slide.videoUrl;
+          video.src = slide.videoUrl; // TypeScript knows this is string due to the check above
           video.preload = 'auto';
           video.muted = true;
           video.playsInline = true;
+          video.crossOrigin = 'anonymous'; // Important for production
+          
+          // Force load in production
+          video.addEventListener('loadstart', () => {
+            console.log(`Desktop preload started for video ${idx}`);
+          });
           
           video.addEventListener('loadeddata', () => {
+            console.log(`Desktop preload completed for video ${idx}`);
             setVideosPreloaded(prev => {
               const newState = [...prev];
               newState[idx] = true;
               return newState;
             });
           });
+
+          video.addEventListener('error', (e) => {
+            console.error(`Desktop preload error for video ${idx}:`, e);
+          });
           
-          video.load(); // Start loading immediately
+          // Force immediate load for production
+          setTimeout(() => {
+            video.load();
+          }, idx * 100); // Stagger loads slightly
         }
       });
     };
 
-    // Start preloading immediately on desktop
-    preloadVideos();
+    // Use requestAnimationFrame to ensure DOM is ready
+    const timeoutId = setTimeout(() => {
+      requestAnimationFrame(() => {
+        preloadVideos();
+      });
+    }, 100);
+
+    return () => clearTimeout(timeoutId);
   }, [slides, isMobile]);
+
+  // Production-specific video loading for desktop
+  useEffect(() => {
+    if (isMobile || !loaded) return;
+
+    // Force load videos for current and next slides on desktop
+    const ensureVideoLoaded = (slideIndex: number) => {
+      const slide = slides[slideIndex];
+      if (slide?.mediaType === 'video') {
+        const video = videoRefs.current[slideIndex];
+        if (video && video.readyState < 2) {
+          console.log(`Production: Force loading video ${slideIndex}`);
+          video.load();
+        }
+      }
+    };
+
+    // Load current video
+    ensureVideoLoaded(currentSlide);
+    
+    // Preload next video
+    const nextSlide = (currentSlide + 1) % slides.length;
+    setTimeout(() => ensureVideoLoaded(nextSlide), 500);
+
+  }, [currentSlide, loaded, isMobile, slides]);
 
   // Enhanced mobile video loading with current slide focus
   useEffect(() => {
@@ -291,12 +336,43 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
                   muted={true} // Always muted for autoplay to work
                   playsInline={true} // Critical for iOS
                   controls={false} // Hide controls on mobile for cleaner look
-                  preload={isMobile ? "metadata" : (idx < 3 ? "auto" : "metadata")} // Metadata preload on mobile
+                  preload={isMobile ? "metadata" : "auto"} // Force auto preload on desktop
+                  crossOrigin="anonymous" // Important for production
                   onLoadStart={() => handleVideoLoadStart(idx)}
                   onCanPlay={() => handleVideoCanPlay(idx)}
-                  onLoadedData={() => console.log(`Video ${idx} data loaded`)}
-                  onLoadedMetadata={() => handleVideoLoadedMetadata(idx)}
-                  onError={(e) => console.log(`Video ${idx} error:`, e)}
+                  onLoadedData={() => {
+                    console.log(`Video ${idx} data loaded`)
+                    // Force load the video element in production if needed
+                    if (!isMobile && idx > 0) {
+                      const video = videoRefs.current[idx];
+                      if (video && video.readyState < 2) {
+                        setTimeout(() => video.load(), 100);
+                      }
+                    }
+                  }}
+                  onLoadedMetadata={() => {
+                    handleVideoLoadedMetadata(idx)
+                    // Additional production fallback for desktop
+                    if (!isMobile && idx > 0) {
+                      const video = videoRefs.current[idx];
+                      if (video && video.readyState < 2) {
+                        video.load();
+                      }
+                    }
+                  }}
+                  onError={(e) => {
+                    console.log(`Video ${idx} error:`, e)
+                    // Production fallback: try reloading
+                    if (!isMobile && slide.videoUrl) {
+                      const video = videoRefs.current[idx];
+                      if (video) {
+                        setTimeout(() => {
+                          video.src = slide.videoUrl!; // Non-null assertion since we checked above
+                          video.load();
+                        }, 1000);
+                      }
+                    }
+                  }}
                   webkit-playsinline="true" // Legacy iOS support
                 />
                 

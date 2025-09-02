@@ -1,4 +1,4 @@
-// components/Navbar.tsx
+ // components/Navbar.tsx
 'use client'
 
 import Image from 'next/image'
@@ -374,9 +374,9 @@ export default function Navbar({
       {/* Mobile full-screen menu */}
       {isMenuOpen && (
         <div className="fixed inset-0 z-[700] md:hidden">
-          <div className="absolute inset-0 flex flex-col">
+          <div className="absolute inset-0 flex flex-col max-h-screen">
             {/* Header */}
-            <div className="relative flex items-center justify-center px-5 h-16 bg-gray-900 text-white">
+            <div className="relative flex items-center justify-center px-5 h-16 bg-gray-900 text-white flex-shrink-0">
               {logoUrl ? (
                 <Image src={logoUrl} alt={logoAlt} width={120} height={48} className="w-auto" />
               ) : (
@@ -392,9 +392,9 @@ export default function Navbar({
             </div>
 
             {/* Body */}
-            <div className="flex-1 bg-white text-gray-900 flex flex-col">
+            <div className="flex-1 bg-white text-gray-900 flex flex-col min-h-0">
               {/* Contact quick actions */}
-              <div className="flex gap-3 px-5 py-4 border-b border-gray-200">
+              <div className="flex gap-3 px-5 py-4 border-b border-gray-200 flex-shrink-0">
                 {phoneHref && (
                   <a
                     href={phoneHref}
@@ -413,9 +413,9 @@ export default function Navbar({
                 )}
               </div>
 
-              {/* Centered nav list */}
-              <div className="flex-1 overflow-y-auto px-5 py-6">
-                <ul className="space-y-3">
+              {/* Scrollable nav list */}
+              <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <ul className="space-y-3 pb-20"> {/* Extra bottom padding for scroll */}
                   {navItems.map((item, idx) => {
                     const hasChildren = Array.isArray(item.children) && item.children.length > 0
                     const isOpen = openMobileDropdown === idx
@@ -459,7 +459,18 @@ export default function Navbar({
                     return (
                       <li key={idx} className="text-center">
                         <button
-                          onClick={() => setOpenMobileDropdown(isOpen ? null : idx)}
+                          onClick={() => {
+                            setOpenMobileDropdown(isOpen ? null : idx)
+                            // Scroll the opened dropdown into view after animation
+                            if (!isOpen) {
+                              setTimeout(() => {
+                                const element = document.querySelector(`[data-dropdown="${idx}"]`)
+                                if (element) {
+                                  element.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                                }
+                              }, 200)
+                            }
+                          }}
                           className="w-full px-4 py-3 rounded-xl border border-gray-200 text-gray-900 hover:bg-gray-50 inline-flex items-center justify-center gap-2"
                         >
                           <span>{item.label}</span>
@@ -467,38 +478,41 @@ export default function Navbar({
                         </button>
 
                         <div
-                          className={`grid transition-all overflow-hidden ${
+                          className={`grid transition-all duration-300 overflow-hidden ${
                             isOpen ? 'grid-rows-[1fr] mt-2' : 'grid-rows-[0fr]'
                           }`}
+                          data-dropdown={idx}
                         >
                           <div className="min-h-0">
-                            <ul className="space-y-2 pt-1">
+                            <ul className="space-y-2 pt-1 pb-4"> {/* More bottom padding */}
                               {item.children!.map((c, i) => {
                                 const href = childHref(item, c)
                                 const external = isExternalUrl(href) || c.openInNewTab
-                                // BLUE buttons with white text (requested)
+                                // Enhanced blue buttons with better touch targets
                                 const childBtn =
-                                  'block w-full text-center px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 active:bg-blue-800 transition'
+                                  'block w-full text-center px-4 py-3 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 active:bg-blue-800 transition-colors touch-manipulation min-h-[48px] flex items-center justify-center text-sm'
                                 return external ? (
-                                  <a
-                                    key={i}
-                                    href={href}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className={childBtn}
-                                    onClick={() => setIsMenuOpen(false)}
-                                  >
-                                    {c.label}
-                                  </a>
+                                  <li key={i}>
+                                    <a
+                                      href={href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={childBtn}
+                                      onClick={() => setIsMenuOpen(false)}
+                                    >
+                                      {c.label}
+                                    </a>
+                                  </li>
                                 ) : (
-                                  <Link
-                                    key={i}
-                                    href={href}
-                                    className={childBtn}
-                                    onClick={() => setIsMenuOpen(false)}
-                                  >
-                                    {c.label}
-                                  </Link>
+                                  <li key={i}>
+                                    <Link
+                                      href={href}
+                                      className={childBtn}
+                                      onClick={() => setIsMenuOpen(false)}
+                                    >
+                                      {c.label}
+                                    </Link>
+                                  </li>
                                 )
                               })}
                             </ul>
@@ -511,7 +525,7 @@ export default function Navbar({
               </div>
 
               {/* Bottom row */}
-              <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-between">
+              <div className="px-5 py-4 border-t border-gray-200 flex items-center justify-between flex-shrink-0 bg-white">
                 <CartButton />
                 {isSignedIn ? (
                   <UserButton afterSignOutUrl="/" />
