@@ -1,4 +1,4 @@
- 'use client'
+'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import Image from 'next/image'
@@ -29,7 +29,6 @@ export default function BreakfastAndLunchPage() {
     ;(async () => {
       try {
         setLoading(true)
-        // adjust your API route/collection if needed
         const res = await fetch('/api/breakfast-dinner?limit=300&depth=1&sort=section,subcategory,name&where[visible][equals]=true')
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         const data = await res.json()
@@ -75,39 +74,79 @@ export default function BreakfastAndLunchPage() {
               }
 
               return (
-                <div key={item.id} className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-200 dark:border-white/10">
+                <div key={item.id} className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden border border-gray-200 dark:border-white/10 shadow-sm hover:shadow-lg transition-shadow duration-300">
+                  {/* Image */}
                   <Link href={`/breakfastandlunch/${item.slug ?? item.id}`} className="relative aspect-[4/3] bg-gray-100 dark:bg-gray-700 block">
                     {imgUrl && (
-                      <Image src={imgUrl} alt={item.name} fill className="object-cover" sizes="(max-width:768px) 100vw, 25vw" />
+                      <Image 
+                        src={imgUrl} 
+                        alt={item.name} 
+                        fill 
+                        className="object-cover hover:scale-105 transition-transform duration-300" 
+                        sizes="(max-width:768px) 100vw, 25vw" 
+                      />
+                    )}
+                    {/* Sale Badge */}
+                    {onSale && (
+                      <div className="absolute top-3 left-3 bg-red-500 text-white text-xs font-semibold px-2 py-1 rounded-full">
+                        SALE
+                      </div>
                     )}
                   </Link>
 
                   <div className="p-4">
+                    {/* Product Name */}
                     <Link href={`/breakfastandlunch/${item.slug ?? item.id}`}>
-                      <h3 className="font-semibold text-gray-900 dark:text-white mb-1 hover:underline">{item.name}</h3>
+                      <h3 className="font-semibold text-gray-900 dark:text-white mb-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors line-clamp-2">
+                        {item.name}
+                      </h3>
                     </Link>
 
-                    {item.description && (
-                      <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2 mb-3">{item.description}</p>
-                    )}
-
-                    <div className="flex items-center justify-between">
-                      <div className="text-lg font-bold text-gray-900 dark:text-white">
-                        ${Number(displayPrice || 0).toFixed(2)}
+                    {/* Price - moved before description */}
+                    <div className="mb-3">
+                      <div className="flex items-center justify-center">
+                        <span className="text-xl font-bold text-gray-900 dark:text-white">
+                          ${Number(displayPrice || 0).toFixed(2)}
+                        </span>
                         {onSale && (
-                          <span className="ml-2 text-sm text-gray-500 line-through">
+                          <span className="ml-2 text-sm text-gray-500 dark:text-gray-400 line-through">
                             ${Number(item.price).toFixed(2)}
                           </span>
                         )}
                       </div>
+                      {onSale && (
+                        <div className="text-center">
+                          <span className="text-sm text-green-600 dark:text-green-400 font-medium">
+                            Save ${(item.price - displayPrice!).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
 
-                      {/* ✅ Your existing AddToCartButton */}
-                      <AddToCartButton product={productForCart} />
+                    {/* Description */}
+                    {item.description && (
+                      <p className="text-sm text-gray-600 dark:text-gray-300 line-clamp-2 mb-4 text-center">
+                        {item.description}
+                      </p>
+                    )}
+
+                    {/* Centered Add to Cart Button */}
+                    <div className="flex justify-center">
+                      <AddToCartButton 
+                        product={productForCart} 
+                        className="px-6 py-2 text-sm font-medium"
+                      />
                     </div>
                   </div>
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {!loading && !error && list.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-gray-500 dark:text-gray-400 text-lg">No breakfast/lunch items available at the moment.</p>
           </div>
         )}
       </div>

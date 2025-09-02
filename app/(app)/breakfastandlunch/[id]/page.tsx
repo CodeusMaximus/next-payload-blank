@@ -52,12 +52,107 @@ export default async function BreakfastLunchDetailPage(
     price: displayPrice,
     images: doc.images,
     slug: doc.slug,
+    addOns: doc.addOns, // Pass the add-ons data to the cart component
     metadata: {
       source: 'breakfast-lunch',
       section: doc.section,
       subcategory: doc.subcategory,
       originalPrice: originalPrice ?? undefined,
     },
+  }
+
+  // (kept) Helper function to render read-only add-on sections (unused now, but harmless to keep)
+  const renderAddOnSection = (title: string, items: any[], showPrice = true) => {
+    if (!items || items.length === 0) return null
+
+    return (
+      <div className="mb-6">
+        <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3">
+          {title}
+        </h4>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {items.map((item, index) => (
+            <div
+              key={index}
+              className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded-lg"
+            >
+              <span className="text-sm text-gray-700 dark:text-gray-300">
+                {item.name}
+                {item.isSpicy && <span className="text-red-500 ml-1">🌶️</span>}
+                {item.isDefault && <span className="text-blue-500 ml-1">(Default)</span>}
+              </span>
+              {showPrice && (
+                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                  {item.price === 0 ? 'Free' : `+$${Number(item.price).toFixed(2)}`}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // NEW: helper to render checkbox sections directly from collection data
+  const renderCheckboxSection = (
+    title: string,
+    items: any[] | undefined,
+    namePrefix: string,
+    priceKey: 'price' | 'priceAdjustment' = 'price' // portionSizes use priceAdjustment
+  ) => {
+    if (!items || items.length === 0) return null
+
+    return (
+      <div className="mb-6">
+        <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3">{title}</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {items.map((item, index) => {
+            const id = `${namePrefix}-${index}`
+            const raw = item?.[priceKey]
+            const priceLabel =
+              typeof raw === 'number'
+                ? raw === 0
+                  ? (priceKey === 'priceAdjustment' ? 'No extra' : 'Free')
+                  : `+$${Number(raw).toFixed(2)}`
+                : ''
+
+            return (
+              <label
+                key={id}
+                htmlFor={id}
+                className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded-lg"
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    id={id}
+                    type="checkbox"
+                    name={`${namePrefix}[]`}
+                    value={item?.name}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    {item?.name}
+                    {item?.isSpicy && <span className="text-red-500 ml-1">🌶️</span>}
+                    {item?.isDefault && <span className="text-blue-500 ml-1">(Default)</span>}
+                    {item?.category && (
+                      <span className="ml-1 text-gray-500 dark:text-gray-400">
+                        • {String(item.category).replace(/-/g, ' ')}
+                      </span>
+                    )}
+                    {item?.size && (
+                      <span className="ml-1 text-gray-500 dark:text-gray-400">• {item.size}</span>
+                    )}
+                  </span>
+                </div>
+                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                  {priceLabel}
+                </span>
+              </label>
+            )
+          })}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -72,7 +167,7 @@ export default async function BreakfastLunchDetailPage(
         </Link>
 
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl overflow-hidden">
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid lg:grid-cols-2 gap-8">
             {/* Image */}
             <div className="relative">
               <div className="aspect-square relative bg-gray-100 dark:bg-gray-700">
@@ -133,6 +228,46 @@ export default async function BreakfastLunchDetailPage(
                   <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
                     {doc.description}
                   </p>
+                </div>
+              )}
+
+              {/* Tags */}
+              {doc.tags && doc.tags.length > 0 && (
+                <div className="mb-6">
+                  <div className="flex flex-wrap gap-2">
+                    {doc.tags.map((tag: string, index: number) => (
+                      <span
+                        key={index}
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 capitalize"
+                      >
+                        {tag.replace(/-/g, ' ')}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Add-Ons as CHECKBOXES (rendered straight from your collection) */}
+              {doc.addOns && (
+                <div className="mb-8">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                    Choose Add-Ons
+                  </h3>
+
+                  <form className="space-y-4 border border-gray-200 dark:border-gray-700 rounded-lg p-4 max-h-96 overflow-y-auto">
+                    {renderCheckboxSection('Extra Proteins',        doc.addOns.proteins,       'proteins')}
+                    {renderCheckboxSection('Cheese Options',        doc.addOns.cheeses,        'cheeses')}
+                    {renderCheckboxSection('Sauces & Condiments',   doc.addOns.sauces,         'sauces')}
+                    {renderCheckboxSection('Vegetables & Toppings', doc.addOns.vegetables,     'vegetables')}
+                    {renderCheckboxSection('Bread & Base Options',  doc.addOns.breadOptions,   'breadOptions')}
+                    {renderCheckboxSection('Side Items & Extras',   doc.addOns.sides,          'sides')}
+                    {renderCheckboxSection('Cooking Preferences',   doc.addOns.cookingOptions, 'cookingOptions')}
+                    {renderCheckboxSection('Beverages',             doc.addOns.beverages,      'beverages')}
+                    {renderCheckboxSection('Portion Sizes',         doc.addOns.portionSizes,   'portionSizes', 'priceAdjustment')}
+                    {renderCheckboxSection('Dietary Options',       doc.addOns.dietaryOptions, 'dietaryOptions')}
+                  </form>
+
+               
                 </div>
               )}
 
