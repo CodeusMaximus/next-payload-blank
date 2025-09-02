@@ -1,15 +1,17 @@
 'use client'
-// app/checkout/page.tsx (with payment methods)
+// app/checkout/page.tsx (with sign-in flow and payment methods)
 import { useCart } from '../../lib/cart/cart-context'
 import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import { useUser, SignInButton, UserButton } from '@clerk/nextjs'
 import Image from 'next/image'
-import { ShoppingBag, CreditCard, Truck, MapPin, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { ShoppingBag, CreditCard, Truck, MapPin, AlertCircle, CheckCircle2, User, Shield, ArrowRight } from 'lucide-react'
 
 type PaymentMethod = 'credit_card' | 'snap_ebt' | 'cash' | 'both'
 
 export default function CheckoutPage() {
   const { items, totalPrice, itemCount, clearCart } = useCart()
+  const { isSignedIn, user, isLoaded } = useUser()
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [orderType, setOrderType] = useState<'pickup' | 'delivery'>('pickup')
@@ -26,6 +28,17 @@ export default function CheckoutPage() {
     state: '',
     zipCode: '',
     notes: ''
+  })
+
+  // Auto-fill form with user data when signed in
+  useState(() => {
+    if (isSignedIn && user) {
+      setCustomerInfo(prev => ({
+        ...prev,
+        name: prev.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+        email: prev.email || user.primaryEmailAddress?.emailAddress || '',
+      }))
+    }
   })
 
   // Calculate SNAP eligible items and totals
@@ -67,6 +80,178 @@ export default function CheckoutPage() {
     )
   }
 
+  // Show sign-in screen if not authenticated
+  if (isLoaded && !isSignedIn) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="container mx-auto px-4 py-8 max-w-4xl">
+          {/* Header */}
+          <div className="mb-8">
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2">
+              Sign in to continue
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400">
+              Please sign in to complete your order and access your order history
+            </p>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-8">
+            {/* Sign In Section */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 md:p-8">
+              <div className="text-center mb-8">
+                <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Shield className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                  Secure Checkout
+                </h2>
+                <p className="text-gray-600 dark:text-gray-300 text-sm">
+                  Sign in to save your information and track your orders
+                </p>
+              </div>
+
+              {/* Benefits */}
+              <div className="space-y-4 mb-8">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    Save your delivery addresses
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    Track your order status in real-time
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    View your order history
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">
+                    Faster checkout for future orders
+                  </span>
+                </div>
+              </div>
+
+              {/* Sign In Button */}
+              <SignInButton 
+                mode="modal" 
+                fallbackRedirectUrl="/checkout"
+                forceRedirectUrl="/checkout"
+              >
+                <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition-colors flex items-center justify-center gap-2">
+                  <User className="h-5 w-5" />
+                  Sign In to Continue
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </SignInButton>
+
+              <div className="mt-4 text-center">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  By signing in, you agree to our Terms of Service and Privacy Policy
+                </p>
+              </div>
+            </div>
+
+            {/* Cart Summary */}
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">
+                Order Summary ({itemCount} items)
+              </h3>
+              
+              <div className="space-y-3 mb-6 max-h-64 overflow-y-auto">
+                {items.map((item) => (
+                  <div key={item.id} className="flex items-center gap-3">
+                    <div className="relative w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-lg overflow-hidden flex-shrink-0">
+                      {item.image ? (
+                        <Image
+                          src={item.image}
+                          alt={item.name}
+                          fill
+                          className="object-cover"
+                          sizes="40px"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <ShoppingBag className="h-4 w-4 text-gray-400" />
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-medium text-sm truncate text-gray-900 dark:text-white">
+                          {item.name}
+                        </h4>
+                        {item.snapEligible && (
+                          <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                            SNAP
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">Qty: {item.quantity}</p>
+                    </div>
+                    
+                    <div className="text-right">
+                      <p className="font-semibold text-sm text-gray-900 dark:text-white">
+                        ${((item.salePrice || item.price) * item.quantity).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                {snapTotal > 0 && (
+                  <div className="flex justify-between items-center text-sm mb-2">
+                    <span className="flex items-center gap-2 text-gray-600 dark:text-gray-300">
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      SNAP Eligible:
+                    </span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      ${snapTotal.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+                
+                {nonSnapTotal > 0 && (
+                  <div className="flex justify-between items-center text-sm mb-2">
+                    <span className="text-gray-600 dark:text-gray-300">Non-SNAP:</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      ${nonSnapTotal.toFixed(2)}
+                    </span>
+                  </div>
+                )}
+                
+                <div className="flex justify-between items-center text-lg font-bold pt-2 border-t border-gray-200 dark:border-gray-600">
+                  <span className="text-gray-900 dark:text-white">Total:</span>
+                  <span className="text-gray-900 dark:text-white">${totalPrice.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Loading state while checking authentication
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading checkout...</p>
+        </div>
+      </div>
+    )
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -93,7 +278,8 @@ export default function CheckoutPage() {
         subtotal: totalPrice,
         snapTotal: snapTotal,
         nonSnapTotal: nonSnapTotal,
-        total: totalPrice
+        total: totalPrice,
+        userId: user?.id
       }
 
       const response = await fetch('/api/orders', {
@@ -128,7 +314,18 @@ export default function CheckoutPage() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-4 md:py-8">
       <div className="container mx-auto px-4 max-w-6xl">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-6 md:mb-8">Checkout</h1>
+        {/* Header with User Info */}
+        <div className="flex items-center justify-between mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
+            Checkout
+          </h1>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              Signed in as {user?.firstName || user?.primaryEmailAddress?.emailAddress}
+            </span>
+            <UserButton afterSignOutUrl="/" />
+          </div>
+        </div>
         
         <div className="flex flex-col lg:grid lg:grid-cols-2 gap-6 md:gap-8">
           {/* Order Summary with Payment Breakdown */}
@@ -458,7 +655,7 @@ export default function CheckoutPage() {
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 md:py-4 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm md:text-base"
               >
                 <CreditCard className="h-5 w-5" />
-                {isLoading ? 'Processing...' : `Place Order - $${totalPrice.toFixed(2)}`}
+                {isLoading ? 'Processing...' : `Place Order - ${totalPrice.toFixed(2)}`}
               </button>
             </form>
           </div>

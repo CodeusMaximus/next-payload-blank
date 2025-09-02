@@ -194,7 +194,7 @@ export default function Footer({ data }: FooterProps) {
                 ))}
               </ul>
             ) : (
-              <p className="text-gray-400">Add some links in the CMS.</p>
+              <p className="text-gray-400"> </p>
             )}
           </div>
 

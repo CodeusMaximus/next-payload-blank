@@ -9,10 +9,7 @@ import {
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { SignInButton, UserButton, useUser } from '@clerk/nextjs'
-import dynamic from 'next/dynamic'
 import CartButton from './cart/cart-button'
-
-const OrderModal = dynamic(() => import('./OrderModal'), { ssr: false })
 
 type MediaDoc = { url?: string; alt?: string }
 
@@ -87,7 +84,6 @@ export default function Navbar({
 
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [isOrderOpen, setIsOrderOpen] = useState(false)
   const [query, setQuery] = useState('')
 
   // Mobile dropdown control
@@ -140,7 +136,7 @@ export default function Navbar({
     setIsMenuOpen(false)
   }
 
-  // Compose CMS links + default inserts (Home, BL, Deli, Order Now, Dashboard)
+  // Compose CMS links + default inserts (Home, BL, Deli, Dashboard)
   const navItems: NavItem[] = useMemo(() => {
     const base = (data?.links ?? []) as NavItem[]
 
@@ -150,13 +146,12 @@ export default function Navbar({
     }
 
     let list = base.filter(
-      l => !['home', 'order', 'order now', 'dashboard'].includes(l.label.toLowerCase())
+      l => !['home', 'dashboard'].includes(l.label.toLowerCase())
     )
 
     list = ensure(list, 'Home', '/')
     list = ensure(list, 'Breakfast/Lunch', '/breakfastandlunch')
     list = ensure(list, 'Deli', '/deli')
-    list = ensure(list, 'Order Now', '/order')
     if (isAdmin) list = ensure(list, 'Dashboard', '/dashboard')
 
     list.sort((a, b) =>
@@ -168,27 +163,6 @@ export default function Navbar({
 
   const renderTopItem = (item: NavItem, idx: number) => {
     const hasChildren = Array.isArray(item.children) && item.children.length > 0
-    const isOrder = ['order', 'order now'].includes(item.label.toLowerCase())
-
-    if (isOrder) {
-      return isSignedIn ? (
-        <button
-          key={idx}
-          onClick={() => setIsOrderOpen(true)}
-          className="relative text-white hover:text-red-400 transition-colors duration-300 group py-2"
-        >
-          Order Now
-          <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-red-500 transition-all duration-300 group-hover:w-full" />
-        </button>
-      ) : (
-        <SignInButton key={idx} mode="modal">
-          <button className="relative text-white hover:text-red-400 transition-colors duration-300 group py-2">
-            Order Now
-            <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-red-500 transition-all duration-300 group-hover:w-full" />
-          </button>
-        </SignInButton>
-      )
-    }
 
     if (!hasChildren) {
       const external = isExternalParent(item.href)
@@ -444,32 +418,7 @@ export default function Navbar({
                 <ul className="space-y-3">
                   {navItems.map((item, idx) => {
                     const hasChildren = Array.isArray(item.children) && item.children.length > 0
-                    const isOrder = ['order', 'order now'].includes(item.label.toLowerCase())
                     const isOpen = openMobileDropdown === idx
-
-                    if (isOrder) {
-                      return isSignedIn ? (
-                        <li key={idx} className="text-center">
-                          <button
-                            onClick={() => { setIsOrderOpen(true); setIsMenuOpen(false) }}
-                            className="w-full px-4 py-3 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition"
-                          >
-                            Order Now
-                          </button>
-                        </li>
-                      ) : (
-                        <li key={idx} className="text-center">
-                          <SignInButton mode="modal">
-                            <button
-                              onClick={() => setIsMenuOpen(false)}
-                              className="w-full px-4 py-3 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 transition"
-                            >
-                              Order Now
-                            </button>
-                          </SignInButton>
-                        </li>
-                      )
-                    }
 
                     if (!hasChildren) {
                       const external = isExternalParent(item.href)
@@ -578,13 +527,6 @@ export default function Navbar({
           </div>
         </div>
       )}
-
-      {/* Order Modal */}
-      <OrderModal
-        isOpen={isOrderOpen}
-        onClose={() => setIsOrderOpen(false)}
-        onSubmit={(details) => { console.log('order details', details) }}
-      />
     </nav>
   )
 }
