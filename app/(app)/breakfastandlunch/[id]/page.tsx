@@ -16,7 +16,6 @@ export default async function BreakfastLunchDetailPage(
   props: { params: Promise<{ id: string }> }
 ) {
   const { id } = await props.params
-
   const payload = await getPayload({ config })
 
   let doc: any | null = null
@@ -52,7 +51,7 @@ export default async function BreakfastLunchDetailPage(
     price: displayPrice,
     images: doc.images,
     slug: doc.slug,
-    addOns: doc.addOns, // Pass the add-ons data to the cart component
+    addOns: doc.addOns,
     metadata: {
       source: 'breakfast-lunch',
       section: doc.section,
@@ -61,44 +60,34 @@ export default async function BreakfastLunchDetailPage(
     },
   }
 
-  // (kept) Helper function to render read-only add-on sections (unused now, but harmless to keep)
-  const renderAddOnSection = (title: string, items: any[], showPrice = true) => {
-    if (!items || items.length === 0) return null
+  // Helper: stable HTML id for each checkbox and serialized value including item.id
+  const makeHtmlId = (prefix: string, item: any, index: number) =>
+    `${prefix}-${String(item?.id ?? index)}`
 
-    return (
-      <div className="mb-6">
-        <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3">
-          {title}
-        </h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {items.map((item, index) => (
-            <div
-              key={index}
-              className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded-lg"
-            >
-              <span className="text-sm text-gray-700 dark:text-gray-300">
-                {item.name}
-                {item.isSpicy && <span className="text-red-500 ml-1">🌶️</span>}
-                {item.isDefault && <span className="text-blue-500 ml-1">(Default)</span>}
-              </span>
-              {showPrice && (
-                <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  {item.price === 0 ? 'Free' : `+$${Number(item.price).toFixed(2)}`}
-                </span>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-    )
+  // Helper: the JSON we put into the checkbox value (includes id + price or priceAdjustment)
+  const serializeForValue = (item: any, priceKey: 'price' | 'priceAdjustment') => {
+    const price =
+      typeof item?.[priceKey] === 'number' ? Number(item[priceKey]) : undefined
+
+    return JSON.stringify({
+      id: item?.id ?? null,
+      name: item?.name ?? '',
+      price, // for portionSizes this will be priceAdjustment
+      size: item?.size ?? null,
+      category: item?.category ?? null,
+      isDefault: !!item?.isDefault,
+      isSpicy: !!item?.isSpicy,
+      // keep raw too if you want on the server:
+      _priceKey: priceKey,
+    })
   }
 
-  // NEW: helper to render checkbox sections directly from collection data
+  // Renders a checkbox section with IDs + JSON values that include the item's id
   const renderCheckboxSection = (
     title: string,
     items: any[] | undefined,
     namePrefix: string,
-    priceKey: 'price' | 'priceAdjustment' = 'price' // portionSizes use priceAdjustment
+    priceKey: 'price' | 'priceAdjustment' = 'price'
   ) => {
     if (!items || items.length === 0) return null
 
@@ -107,7 +96,7 @@ export default async function BreakfastLunchDetailPage(
         <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-3">{title}</h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {items.map((item, index) => {
-            const id = `${namePrefix}-${index}`
+            const htmlId = makeHtmlId(namePrefix, item, index)
             const raw = item?.[priceKey]
             const priceLabel =
               typeof raw === 'number'
@@ -118,16 +107,20 @@ export default async function BreakfastLunchDetailPage(
 
             return (
               <label
-                key={id}
-                htmlFor={id}
+                key={htmlId}
+                htmlFor={htmlId}
                 className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700 rounded-lg"
               >
                 <div className="flex items-center gap-2">
                   <input
-                    id={id}
+                    id={htmlId}
                     type="checkbox"
                     name={`${namePrefix}[]`}
-                    value={item?.name}
+                    // IMPORTANT: value contains the item id + price info
+                    value={serializeForValue(item, priceKey)}
+                    data-id={item?.id ?? ''}
+                    data-name={item?.name ?? ''}
+                    data-price={typeof raw === 'number' ? Number(raw) : ''}
                     className="h-4 w-4"
                   />
                   <span className="text-sm text-gray-700 dark:text-gray-300">
@@ -247,14 +240,18 @@ export default async function BreakfastLunchDetailPage(
                 </div>
               )}
 
-              {/* Add-Ons as CHECKBOXES (rendered straight from your collection) */}
+              {/* Add-Ons as CHECKBOXES */}
               {doc.addOns && (
                 <div className="mb-8">
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                     Choose Add-Ons
                   </h3>
 
-                  <form className="space-y-4 border border-gray-200 dark:border-gray-700 rounded-lg p-4 max-h-96 overflow-y-auto">
+                  {/* IMPORTANT: stable form id so client button can read selections */}
+                  <form
+                    id="customize-form"
+                    className="space-y-4 border border-gray-200 dark:border-gray-700 rounded-lg p-4 max-h-96 overflow-y-auto"
+                  >
                     {renderCheckboxSection('Extra Proteins',        doc.addOns.proteins,       'proteins')}
                     {renderCheckboxSection('Cheese Options',        doc.addOns.cheeses,        'cheeses')}
                     {renderCheckboxSection('Sauces & Condiments',   doc.addOns.sauces,         'sauces')}
@@ -266,11 +263,11 @@ export default async function BreakfastLunchDetailPage(
                     {renderCheckboxSection('Portion Sizes',         doc.addOns.portionSizes,   'portionSizes', 'priceAdjustment')}
                     {renderCheckboxSection('Dietary Options',       doc.addOns.dietaryOptions, 'dietaryOptions')}
                   </form>
-
-               
                 </div>
               )}
 
+              {/* Your AddToCartButton should read #customize-form, parse JSON values, and
+                  set selectedAddOns / addOnTotal / basePrice into the cart item */}
               <AddToCartButton product={productForCart} />
             </div>
           </div>
