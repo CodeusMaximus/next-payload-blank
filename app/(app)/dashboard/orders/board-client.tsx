@@ -1,7 +1,13 @@
-'use client'
+ 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { getPusherClient } from '../../../lib/pusher/client'
+// inside your OrdersBoardClient component:
+import CustomerProgressModal from '../../components/CustomerProgressModal'
+// ...
+ 
+
+ 
 
 type OrderStatus =
   | 'received'
@@ -41,6 +47,17 @@ const LABEL: Record<OrderStatus, string> = {
   completed: 'Completed',
   canceled: 'Canceled',
 }
+
+const STATUS_COLORS: Record<OrderStatus, string> = {
+  received: 'bg-gradient-to-r from-blue-500 to-blue-600',
+  confirmed: 'bg-gradient-to-r from-purple-500 to-purple-600',
+  preparing: 'bg-gradient-to-r from-amber-500 to-orange-500',
+  ready: 'bg-gradient-to-r from-emerald-500 to-green-500',
+  out_for_delivery: 'bg-gradient-to-r from-cyan-500 to-teal-500',
+  completed: 'bg-gradient-to-r from-green-600 to-emerald-600',
+  canceled: 'bg-gradient-to-r from-red-500 to-red-600',
+}
+
 const STATUSES: OrderStatus[] = ['received','confirmed','preparing','ready','out_for_delivery','completed','canceled']
 
 const money = (n: number) => `$${n.toFixed(2)}`
@@ -64,7 +81,7 @@ function seedDemo(): Order[] {
 
   const o = (partial: Partial<Order>): Order => {
     const items = partial.items || []
-    const total = orderTotal(items as OrderItem[])
+    const total = orderTotal(items)
     return {
       id: crypto.randomUUID(),
       shortId: partial.shortId || id8(),
@@ -189,18 +206,190 @@ function seedDemo(): Order[] {
   ]
 }
 
+// ---------- Printing helpers
+
+function escapeHTML(s: string) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+
+function buildReceiptHTML(order: Order) {
+  const created = order.createdAt ? new Date(order.createdAt) : new Date()
+  const itemsHTML = order.items.map(it => {
+    const addOns = (it.addOns || [])
+      .map(a => `<div class="addon">- ${escapeHTML(a.name)}${typeof a.delta === 'number' && a.delta !== 0 ? ` (+${money(a.delta)})` : ''}</div>`)
+      .join('')
+    return `
+      <div class="row">
+        <div class="left">
+          <div class="qty">${it.quantity}×</div>
+          <div class="name">${escapeHTML(it.name)}</div>
+        </div>
+        <div class="right">${money(lineTotal(it))}</div>
+      </div>
+      ${addOns}
+    `
+  }).join('')
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Ticket ${escapeHTML(order.shortId)}</title>
+  <style>
+    /* 1) Hard force ticket page + no margins */
+   /* 1) Hard force ticket page + no margins */
+@page {
+  size: 80mm auto;  /* change to 58mm auto if you use 58mm rolls */
+  margin: 0;
+}
+
+/* 2) Match content to the roll width. Use auto margins to center if the driver insists on Letter. */
+html, body {
+  width: 80mm;            /* EXACT roll width */
+  margin: 0 auto;         /* <-- centers on Letter/A4 previews */
+  padding: 0;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+/* 3) Receipt content; keep it same width and centered */
+.receipt {
+  width: 80mm;            /* same as page width */
+  margin: 0 auto;         /* center as fallback */
+  padding: 0;
+}
+
+.center { text-align: center; }
+.bold { font-weight: 800; }
+.muted { color: #333; }
+.line { border-top: 1px dashed #000; margin: 6px 0; }
+
+.row { display: flex; justify-content: space-between; gap: 8px; break-inside: avoid; }
+.left { display: flex; gap: 8px; }
+.qty { min-width: 18px; text-align: right; }
+.name { max-width: 60mm; word-break: break-word; }
+
+.addon { margin-left: 26px; font-size: 12px; color:#111; break-inside: avoid; }
+.hdr { font-size: 18px; margin: 0; }
+.big { font-size: 20px; }
+.pill { display:inline-block; border:1px solid #000; padding:2px 6px; border-radius:999px; font-size:11px; }
+
+.totals .row { font-size: 15px; }
+.totals .row.total { font-size: 17px; font-weight: 800; }
+
+/* 4) Double down for print engines that ignore @page */
+@media print {
+  html, body { width: 80mm; margin: 0 auto; padding: 0; }
+}
+
+  </style>
+</head>
+<body>
+  <div class="receipt">
+    <div class="center">
+      <div class="hdr bold">ALP Grocery & Deli</div>
+      <div class="muted">${created.toLocaleDateString()} ${created.toLocaleTimeString()}</div>
+      <div style="margin-top:8px">
+        <span class="pill">#${escapeHTML(order.shortId)}</span>
+        &nbsp;
+        <span class="pill">${order.type === 'pickup' ? 'PICKUP' : 'DELIVERY'}</span>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <div class="big bold">${escapeHTML(order.name)}</div>
+      ${order.phone ? `<div class="muted">📞 ${escapeHTML(order.phone)}</div>` : ''}
+      ${order.type === 'delivery' && order.address ? `<div class="muted">📍 ${escapeHTML(order.address)}</div>` : ''}
+    </div>
+
+    <div class="line"></div>
+
+    <div class="items">
+      ${itemsHTML}
+    </div>
+
+    <div class="line"></div>
+
+    <div class="totals">
+      <div class="row"><div>Subtotal</div><div>${money(orderTotal(order.items))}</div></div>
+      <div class="row total"><div>Total</div><div>${money(order.total || orderTotal(order.items))}</div></div>
+    </div>
+
+    <div class="center" style="margin-top:12px" class="muted">Thank you!</div>
+  </div>
+
+  <script>
+    // Auto-print on load
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+        setTimeout(function(){ window.close && window.close(); }, 250);
+      }, 50);
+    };
+  </script>
+</body>
+</html>`
+}
+
+function printOrderTicket(order: Order) {
+  if (typeof document === 'undefined') return;
+
+  const html = buildReceiptHTML(order);
+
+  // Create a hidden iframe that contains the receipt
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  (iframe as any).srcdoc = html;
+
+  document.body.appendChild(iframe);
+
+  // When the iframe loads, call print() on its window
+  const cleanup = () => {
+    try { document.body.removeChild(iframe); } catch {}
+  };
+
+  const onLoad = () => {
+    try {
+      const win = iframe.contentWindow;
+      if (!win) { cleanup(); return; }
+
+      const afterPrint = () => {
+        win.removeEventListener?.('afterprint', afterPrint);
+        cleanup();
+      };
+      win.addEventListener?.('afterprint', afterPrint);
+
+      win.focus();
+      setTimeout(() => {
+        try { win.print(); } catch { cleanup(); }
+      }, 50);
+    } catch {
+      cleanup();
+    }
+  };
+
+  iframe.onload = onLoad;
+}
+
 // ---------- Component
 
 export default function OrdersBoardClient({
   initialOrders = [],
-  demoOnly = true,             // <<< DEMO MODE: no API calls; buttons always work
-  startExpanded = true,        // expand cards so you can see items immediately
+  demoOnly = true,
+  startExpanded = true,
 }: {
   initialOrders?: Order[]
   demoOnly?: boolean
   startExpanded?: boolean
 }) {
-  // Use real orders if provided, else seed demo
   const seeded = (initialOrders.length ? initialOrders : seedDemo()).map(o => ({
     ...o,
     total: typeof o.total === 'number' && o.total > 0 ? o.total : orderTotal(o.items),
@@ -211,8 +400,12 @@ export default function OrdersBoardClient({
     Object.fromEntries(seeded.map(o => [o.shortId, startExpanded]))
   )
   const [active, setActive] = useState<'all' | OrderStatus>('all')
-  const [isLight, setIsLight] = useState(true)
   const [busy, setBusy] = useState<Record<string, boolean>>({})
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+    // 🔔 Customer progress modal state (MUST be inside the component)
+  const [notifyOpen, setNotifyOpen] = useState(false)
+  const [notifyOrder, setNotifyOrder] = useState<{ shortId: string } | null>(null)
+
 
   // Realtime only when not demo
   useEffect(() => {
@@ -239,193 +432,368 @@ export default function OrdersBoardClient({
   }, [orders])
 
   async function changeStatus(shortId: string, next: OrderStatus) {
-    // optimistic UI
-    setBusy(b => ({ ...b, [shortId]: true }))
-    const prev = orders
-    setOrders(list => list.map(o => o.shortId === shortId ? { ...o, status: next } : o))
+  setBusy(b => ({ ...b, [shortId]: true }))
+  const prev = orders
+  const optimistic = orders.map(o => o.shortId === shortId ? { ...o, status: next } : o)
+  setOrders(optimistic)
 
-    try {
-      if (!demoOnly) {
-        await fetch(`/api/orders/${shortId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: next }),
-        }).then(r => { if (!r.ok) throw new Error('bad status') })
-      }
-    } catch {
-      // rollback if API mode fails
-      if (!demoOnly) setOrders(prev)
-    } finally {
-      setBusy(b => ({ ...b, [shortId]: false }))
+  try {
+    if (!demoOnly) {
+      await fetch(`/api/orders/${shortId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: next }),
+      }).then(r => { if (!r.ok) throw new Error('bad status') })
     }
-  }
 
-  // theme tokens
-  const textMain = isLight ? 'text-gray-900' : 'text-white'
-  const textSub  = isLight ? 'text-gray-600' : 'text-white/70'
-  const textDim  = isLight ? 'text-gray-500' : 'text-white/60'
-  const border   = isLight ? 'border-gray-200' : 'border-white/10'
-  const panel    = isLight ? 'bg-white' : 'bg-white/5'
-  const panel2   = isLight ? 'bg-gray-50' : 'bg-white/[0.04]'
-  const mutedBtn = isLight ? 'bg-gray-100 hover:bg-gray-200' : 'bg-white/10 hover:bg-white/15'
+    // ✅ open the customer progress modal here
+    setNotifyOrder({ shortId })
+    setNotifyOpen(true)
+
+  } catch {
+    if (!demoOnly) setOrders(prev)
+  } finally {
+    setBusy(b => ({ ...b, [shortId]: false }))
+  }
+}
+
 
   const visible = active === 'all' ? STATUSES : [active]
 
   return (
-    <div className="flex gap-6">
-      {/* Sidebar */}
-      <aside className="w-64 shrink-0">
-        <div className="sticky top-20 space-y-2">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-lg border-b border-white/20 shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <h2 className={`text-sm font-bold tracking-wide ${textMain} uppercase`}>Statuses</h2>
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                Orders Dashboard
+              </h1>
+              <p className="text-sm text-slate-600 mt-1">{active === 'all' ? 'All Orders' : LABEL[active]}</p>
+            </div>
+            
+            {/* Mobile Menu Toggle */}
             <button
-              type="button"
-              onClick={() => setIsLight(v => !v)}
-              className={`text-xs px-2 py-1 rounded border ${border} ${mutedBtn} ${textMain}`}
-              title="Toggle theme"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-lg shadow-lg hover:shadow-xl transition-all"
             >
-              {isLight ? 'Dark' : 'Light'}
+              <span className="text-sm font-medium">Filters</span>
             </button>
+
+            {/* Desktop Stats */}
+            <div className="hidden lg:flex items-center gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-emerald-600">{counts.all}</div>
+                <div className="text-xs text-slate-500">Total Orders</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-amber-600">{counts.received + counts.confirmed + counts.preparing}</div>
+                <div className="text-xs text-slate-500">In Progress</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 py-6">
+        <div className="flex gap-6">
+          {/* Mobile Filters Overlay */}
+          {mobileMenuOpen && (
+            <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMobileMenuOpen(false)}>
+              <div className="fixed inset-y-0 left-0 w-80 bg-white shadow-2xl" onClick={e => e.stopPropagation()}>
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-lg font-bold text-slate-800">Filter Orders</h2>
+                    <button
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="p-2 hover:bg-slate-100 rounded-lg"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <FilterButtons 
+                    active={active}
+                    counts={counts}
+                    onSelect={(status) => {
+                      setActive(status)
+                      setMobileMenuOpen(false)
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Desktop Sidebar */}
+          <aside className="hidden lg:block w-80 shrink-0">
+            <div className="sticky top-24">
+              <div className="bg-white/70 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 p-6">
+                <h2 className="text-lg font-bold text-slate-800 mb-6">Filter Orders</h2>
+                <FilterButtons 
+                  active={active}
+                  counts={counts}
+                  onSelect={setActive}
+                />
+              </div>
+            </div>
+          </aside>
+
+          {/* Main Content */}
+          <section className="flex-1">
+            <div className={`grid gap-6 ${active === 'all' ? 'grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3' : 'grid-cols-1'}`}>
+              {visible.map(status => (
+                <div key={status} className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-white font-bold shadow-lg ${STATUS_COLORS[status]}`}>
+                      <span className="text-sm">{LABEL[status]}</span>
+                      <span className="bg-white/20 px-2 py-1 rounded-full text-xs">{grouped[status].length}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {grouped[status].map(o => {
+                      const isOpen = !!expanded[o.shortId]
+                      return (
+                        <OrderCard
+                          key={o.shortId}
+                          order={o}
+                          isOpen={isOpen}
+                          busy={!!busy[o.shortId]}
+                          onToggle={() => setExpanded(e => ({ ...e, [o.shortId]: !e[o.shortId] }))}
+                          onStatusChange={(status) => changeStatus(o.shortId, status)}
+                          onPrint={() => printOrderTicket(o)}
+                        />
+                      )
+                    })}
+                    {grouped[status].length === 0 && (
+                      <div className="text-center py-12 text-slate-400">
+                        <div className="text-4xl mb-2">📋</div>
+                        <div className="text-sm">No {LABEL[status].toLowerCase()} orders</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+      {notifyOrder && (
+  <CustomerProgressModal
+    shortId={notifyOrder.shortId}
+    open={notifyOpen}
+    onClose={() => setNotifyOpen(false)}
+    trackUrl={`${typeof window !== 'undefined' ? window.location.origin : ''}/track/${notifyOrder.shortId}`}
+  />
+)}
+
+    </div>
+  )
+}
+
+function FilterButtons({ 
+  active, 
+  counts, 
+  onSelect 
+}: { 
+  active: 'all' | OrderStatus
+  counts: Record<'all'|OrderStatus, number>
+  onSelect: (status: 'all' | OrderStatus) => void 
+}) {
+  return (
+    <div className="space-y-2">
+      <button
+        onClick={() => onSelect('all')}
+        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium transition-all ${
+          active === 'all' 
+            ? 'bg-gradient-to-r from-slate-800 to-slate-700 text-white shadow-lg' 
+            : 'bg-slate-50 hover:bg-slate-100 text-slate-700'
+        }`}
+      >
+        <span>All Orders</span>
+        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+          active === 'all' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
+        }`}>
+          {counts.all}
+        </span>
+      </button>
+
+      {STATUSES.map(s => (
+        <button
+          key={s}
+          onClick={() => onSelect(s)}
+          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium transition-all capitalize ${
+            active === s
+              ? `${STATUS_COLORS[s]} text-white shadow-lg`
+              : 'bg-slate-50 hover:bg-slate-100 text-slate-700'
+          }`}
+        >
+          <span>{LABEL[s]}</span>
+          <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+            active === s ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
+          }`}>
+            {counts[s]}
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function OrderCard({ 
+  order, 
+  isOpen, 
+  busy, 
+  onToggle, 
+  onStatusChange,
+  onPrint,
+}: {
+  order: Order
+  isOpen: boolean
+  busy: boolean
+  onToggle: () => void
+  onStatusChange: (status: OrderStatus) => void
+  onPrint: () => void
+}) {
+  return (
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20 overflow-hidden hover:shadow-2xl transition-all duration-300">
+      <div className="p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-xs font-bold text-slate-500">#{order.shortId}</span>
+              <span className={`px-3 py-1 rounded-full text-xs font-bold text-white ${
+                order.type === 'pickup' 
+                  ? 'bg-gradient-to-r from-blue-500 to-blue-600' 
+                  : 'bg-gradient-to-r from-emerald-500 to-emerald-600'
+              }`}>
+                {order.type === 'pickup' ? 'PICKUP' : 'DELIVERY'}
+              </span>
+            </div>
+            <h3 className="text-xl font-bold text-slate-800 mb-2">{order.name}</h3>
+            {order.createdAt && (
+              <p className="text-sm text-slate-500">
+                {tTime(order.createdAt)} • {tDate(order.createdAt)}
+              </p>
+            )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setActive('all')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border ${border} ${textMain} text-sm font-semibold
-              ${active === 'all' ? 'bg-black text-white border-black' : panel2}`}
-          >
-            <span>All Orders</span>
-            <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-black text-white">{counts.all}</span>
-          </button>
-
-          {STATUSES.map(s => (
-            <button
-              type="button"
-              key={s}
-              onClick={() => setActive(s)}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border ${border} ${textMain} text-sm font-semibold capitalize
-                ${active === s ? 'bg-black text-white border-black' : panel2}`}
-            >
-              <span>{LABEL[s]}</span>
-              <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-black text-white">{counts[s]}</span>
-            </button>
-          ))}
-        </div>
-      </aside>
-
-      {/* Main */}
-      <section className="flex-1">
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className={`text-xl md:text-2xl font-bold ${textMain}`}>{active === 'all' ? 'All Orders' : LABEL[active]}</h1>
-          <div className={`text-xs ${textDim}`}>Click status buttons to move an order</div>
-        </div>
-
-        <div className={`grid gap-4 ${active === 'all' ? 'grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4' : 'grid-cols-1'}`}>
-          {visible.map(status => (
-            <div key={status} className={`${panel} rounded-xl border ${border} p-3`}>
-              <div className="flex items-center justify-between mb-3">
-                <span className="inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold bg-black text-white">
-                  {LABEL[status]}
-                </span>
-                <span className={`text-xs ${textDim}`}>{grouped[status].length}</span>
+          {/* Amount + Print */}
+          <div className="text-right">
+            <div className="flex items-center justify-end gap-2">
+              <div className="text-3xl md:text-4xl font-black bg-gradient-to-r from-emerald-500 to-green-500 bg-clip-text text-transparent">
+                {money(order.total)}
               </div>
+              <button
+                onClick={onPrint}
+                title="Print ticket"
+                aria-label="Print ticket"
+                className="p-2 rounded-lg border border-slate-200 hover:bg-slate-100 active:scale-95 transition"
+              >
+                {/* Printer Icon (SVG) */}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M6 9V3h12v6M6 17H4a2 2 0 0 1-2-2v-3a3 3 0 0 1 3-3h14a3 3 0 0 1 3 3v3a2 2 0 0 1-2 2h-2M7 17h10v4H7v-4Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            </div>
+            <button
+              onClick={onToggle}
+              className="mt-2 text-sm text-blue-600 hover:text-blue-700 font-medium underline"
+            >
+              {isOpen ? 'Hide details' : 'Show details'}
+            </button>
+          </div>
+        </div>
 
+        {isOpen && (
+          <div className="border-t border-slate-100 pt-4 space-y-4 animate-in slide-in-from-top duration-300">
+            {/* Contact Info */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              {order.phone && (
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">📞</span>
+                  <span className="text-slate-800">{order.phone}</span>
+                </div>
+              )}
+              {order.email && (
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500">✉️</span>
+                  <span className="text-slate-800">{order.email}</span>
+                </div>
+              )}
+              {order.type === 'delivery' && order.address && (
+                <div className="md:col-span-2 flex items-start gap-2">
+                  <span className="text-slate-500">📍</span>
+                  <span className="text-slate-800">{order.address}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Items */}
+            <div>
+              <h4 className="text-sm font-bold text-slate-600 mb-3">Order Items</h4>
               <div className="space-y-3">
-                {grouped[status].map(o => {
-                  const isOpen = !!expanded[o.shortId]
+                {order.items.map((item, idx) => {
+                  const extra = (item.addOns || []).reduce((s,a)=> s + (a.delta || 0), 0)
                   return (
-                    <div key={o.shortId} className={`${panel2} rounded-lg border ${border} p-3`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className={`text-xs ${textSub}`}>#{o.shortId}</div>
-                          <div className={`font-semibold ${textMain}`}>{o.name}</div>
-                          <div className="mt-1 flex items-center gap-2">
-                            <span className={`inline-flex items-center rounded px-2 py-0.5 text-[11px] font-semibold ${o.type === 'pickup' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'}`}>
-                              {o.type === 'pickup' ? 'PICKUP' : 'DELIVERY'}
+                    <div key={idx} className="bg-slate-50 rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1">
+                          <div className="font-medium text-slate-800">
+                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold mr-2">
+                              {item.quantity}×
                             </span>
-                            {o.createdAt && (
-                              <span className={`text-[11px] ${textDim}`}>{tTime(o.createdAt)} • {tDate(o.createdAt)}</span>
-                            )}
+                            {item.name}
                           </div>
                         </div>
-                        <div className="text-right">
-                          {/* BIG green total with different values per order */}
-                          <div className="text-emerald-600 font-extrabold text-2xl md:text-3xl leading-none">{money(o.total)}</div>
-                          <button
-                            type="button"
-                            onClick={() => setExpanded(e => ({ ...e, [o.shortId]: !e[o.shortId] }))}
-                            className={`mt-2 text-xs underline ${textMain}`}
-                          >
-                            {isOpen ? 'Hide details' : 'Details'}
-                          </button>
+                        <div className="text-lg font-bold text-emerald-600">
+                          {money(lineTotal(item))}
                         </div>
                       </div>
-
-                      {isOpen && (
-                        <div className={`mt-3 border-t ${border} pt-3 space-y-3`}>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
-                            {o.email && <div className={`${textMain}`}><span className={textSub}>Email:</span> {o.email}</div>}
-                            {o.phone && <div className={`${textMain}`}><span className={textSub}>Phone:</span> {o.phone}</div>}
-                            {o.type === 'delivery' && o.address && (
-                              <div className={`sm:col-span-2 ${textMain}`}><span className={textSub}>Address:</span> {o.address}</div>
-                            )}
-                          </div>
-
-                          {/* Items list */}
-                          <div>
-                            <div className={`text-xs ${textSub} mb-1`}>Items</div>
-                            <div className="space-y-2 text-sm">
-                              {o.items.map((it, idx) => {
-                                const extra = (it.addOns || []).reduce((s,a)=> s + (a.delta || 0), 0)
-                                return (
-                                  <div key={idx}>
-                                    <div className="flex items-start justify-between">
-                                      <div className={`${textMain}`}>{it.quantity}× {it.name}</div>
-                                      <div className={`${textMain} font-medium`}>{money(lineTotal(it))}</div>
-                                    </div>
-                                    <div className="ml-4 text-xs">
-                                      <div className={`${textSub}`}>
-                                        Unit: {money(it.unit)}
-                                        {extra ? ` • +${money(extra)} add-ons` : ''}
-                                      </div>
-                                      {(it.addOns || []).map((a,i)=>(
-                                        <div key={i} className={`${textDim}`}>
-                                          <span className="font-medium">{a.group}:</span> {a.name}{typeof a.delta==='number'&&a.delta!==0?` +${money(a.delta)}`:''}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          </div>
+                      <div className="text-xs text-slate-500 mb-2">
+                        Unit price: {money(item.unit)}
+                        {extra > 0 && ` • Add-ons: +${money(extra)}`}
+                      </div>
+                      {(item.addOns || []).length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {(item.addOns || []).map((addon, i) => (
+                            <span key={i} className="bg-slate-200 text-slate-700 px-2 py-1 rounded text-xs">
+                              {addon.name}
+                              {typeof addon.delta === 'number' && addon.delta !== 0 && ` +${money(addon.delta)}`}
+                            </span>
+                          ))}
                         </div>
                       )}
-
-                      {/* Status buttons */}
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {STATUSES.filter(s => s !== o.status).map(s => (
-                          <button
-                            type="button"
-                            key={s}
-                            onClick={() => changeStatus(o.shortId, s)}
-                            className={`text-xs px-2.5 py-1.5 rounded-md border ${border} bg-black text-white hover:bg-black/90 disabled:opacity-60`}
-                            disabled={!!busy[o.shortId]}
-                          >
-                            {LABEL[s]}
-                          </button>
-                        ))}
-                        {busy[o.shortId] && <span className={`text-xs ${textDim}`}>Updating…</span>}
-                      </div>
                     </div>
                   )
                 })}
-                {grouped[status].length === 0 && <div className={`text-xs ${textDim}`}>No orders</div>}
               </div>
             </div>
-          ))}
+          </div>
+        )}
+
+        {/* Status Actions */}
+        <div className="mt-6 pt-4 border-t border-slate-100">
+          <div className="flex flex-wrap gap-2">
+            {STATUSES.filter(s => s !== order.status).map(s => (
+              <button
+                key={s}
+                onClick={() => onStatusChange(s)}
+                disabled={busy}
+                className={`px-4 py-2 rounded-lg text-xs font-bold text-white transition-all disabled:opacity-50 ${STATUS_COLORS[s]} hover:shadow-lg hover:scale-105`}
+              >
+                {LABEL[s]}
+              </button>
+            ))}
+            {busy && (
+              <div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-500">
+                <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                Updating...
+              </div>
+            )}
+          </div>
         </div>
-      </section>
+      </div>
     </div>
   )
 }
