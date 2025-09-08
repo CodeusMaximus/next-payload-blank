@@ -1,6 +1,7 @@
-// app/track/[shortId]/page.tsx
-import Client from '../[shortId]/track-client'
+import type { PageProps } from 'next' // if available in your version
+import Client from './track-client'
 
-export default function TrackPage({ params }: { params: { shortId: string } }) {
-  return <Client shortId={params.shortId} />
+export default async function TrackPage({ params }: PageProps) {
+  const { shortId } = await params
+  return <Client shortId={shortId} />
 }
