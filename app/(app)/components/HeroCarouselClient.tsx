@@ -32,6 +32,35 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
   const [mobileVideosInitialized, setMobileVideosInitialized] = useState(false);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
+  // Debug logging for component state
+  useEffect(() => {
+    console.log('Client: Slides received:', slides.length);
+    slides.forEach((slide, idx) => {
+      console.log(`Client: Slide ${idx}:`, {
+        title: slide.title,
+        mediaType: slide.mediaType,
+        hasVideoUrl: !!slide.videoUrl,
+        videoUrl: slide.videoUrl
+      });
+    });
+  }, [slides]);
+
+  // Clear stuck loading states after timeout
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setVideoLoading(prev => {
+        const hasStuckLoading = prev.some(loading => loading);
+        if (hasStuckLoading) {
+          console.log('Clearing potentially stuck loading states');
+          return new Array(slides.length).fill(false);
+        }
+        return prev;
+      });
+    }, 15000); // 15 second timeout
+    
+    return () => clearTimeout(timeout);
+  }, [slides.length]);
+
   // Detect mobile device
   useEffect(() => {
     const checkMobile = () => {
@@ -112,22 +141,23 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
     }
   }, [isMobile, currentSlide, slides, userInteracted]);
 
-  // Preload videos aggressively on component mount (desktop only)
+  // Enhanced preload videos with better error handling
   useEffect(() => {
     if (isMobile) return; // Skip preloading on mobile
 
     const preloadVideos = () => {
       slides.forEach((slide, idx) => {
-        if (slide.mediaType === 'video' && slide.videoUrl && idx < 3) {
+        if (slide.mediaType === 'video' && slide.videoUrl) {
+          console.log(`Desktop: Starting preload for video ${idx}:`, slide.videoUrl);
+          
           // Create invisible video element to preload
           const video = document.createElement('video');
-          video.src = slide.videoUrl; // TypeScript knows this is string due to the check above
+          video.src = slide.videoUrl;
           video.preload = 'auto';
           video.muted = true;
           video.playsInline = true;
-          video.crossOrigin = 'anonymous'; // Important for production
+          video.crossOrigin = 'anonymous';
           
-          // Force load in production
           video.addEventListener('loadstart', () => {
             console.log(`Desktop preload started for video ${idx}`);
           });
@@ -142,18 +172,44 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
           });
 
           video.addEventListener('error', (e) => {
+            const videoElement = e.target as HTMLVideoElement;
             console.error(`Desktop preload error for video ${idx}:`, e);
+            console.error(`Failed video URL:`, slide.videoUrl);
+            console.error(`Video error details:`, {
+              error: videoElement?.error,
+              networkState: videoElement?.networkState,
+              readyState: videoElement?.readyState,
+              src: videoElement?.src
+            });
+            
+            // Try to get more error info
+            if (videoElement?.error) {
+              console.error(`Video error code: ${videoElement.error.code}`);
+              console.error(`Video error message: ${videoElement.error.message}`);
+            }
           });
           
-          // Force immediate load for production
+          video.addEventListener('abort', () => {
+            console.warn(`Desktop preload aborted for video ${idx}`);
+          });
+          
+          video.addEventListener('stalled', () => {
+            console.warn(`Desktop preload stalled for video ${idx}`);
+          });
+          
           setTimeout(() => {
-            video.load();
-          }, idx * 100); // Stagger loads slightly
+            try {
+              video.load();
+            } catch (error) {
+              console.error(`Error loading video ${idx}:`, error);
+            }
+          }, idx * 200); // Stagger loads more
+        } else {
+          console.log(`Desktop: Skipping preload for slide ${idx} - not a video or no URL`);
         }
       });
     };
 
-    // Use requestAnimationFrame to ensure DOM is ready
     const timeoutId = setTimeout(() => {
       requestAnimationFrame(() => {
         preloadVideos();
@@ -167,22 +223,23 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
   useEffect(() => {
     if (isMobile || !loaded) return;
 
-    // Force load videos for current and next slides on desktop
     const ensureVideoLoaded = (slideIndex: number) => {
       const slide = slides[slideIndex];
-      if (slide?.mediaType === 'video') {
+      if (slide?.mediaType === 'video' && slide.videoUrl) {
         const video = videoRefs.current[slideIndex];
         if (video && video.readyState < 2) {
           console.log(`Production: Force loading video ${slideIndex}`);
-          video.load();
+          try {
+            video.load();
+          } catch (error) {
+            console.error(`Error force loading video ${slideIndex}:`, error);
+          }
         }
       }
     };
 
-    // Load current video
     ensureVideoLoaded(currentSlide);
     
-    // Preload next video
     const nextSlide = (currentSlide + 1) % slides.length;
     setTimeout(() => ensureVideoLoaded(nextSlide), 500);
 
@@ -192,22 +249,23 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
   useEffect(() => {
     if (!isMobile || !loaded || !mobileVideosInitialized) return;
 
-    // Load current video and next video for smoother transitions
     const loadVideoForSlide = (slideIndex: number) => {
       const slide = slides[slideIndex];
-      if (slide?.mediaType === 'video') {
+      if (slide?.mediaType === 'video' && slide.videoUrl) {
         const video = videoRefs.current[slideIndex];
         if (video && video.readyState < 2) {
           console.log(`Mobile: Loading video for slide ${slideIndex}`);
-          video.load();
+          try {
+            video.load();
+          } catch (error) {
+            console.error(`Mobile: Error loading video ${slideIndex}:`, error);
+          }
         }
       }
     };
 
-    // Load current slide video
     loadVideoForSlide(currentSlide);
     
-    // Preload next slide video for smoother transition
     const nextSlide = (currentSlide + 1) % slides.length;
     setTimeout(() => loadVideoForSlide(nextSlide), 1000);
 
@@ -223,30 +281,24 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
       const slide = slides[index];
       
       if (index === currentSlide) {
-        // Play current slide video
-        if (slide?.autoplay) {
-          // On mobile, only play after user interaction and ensure muted
+        if (slide?.autoplay && slide.mediaType === 'video') {
           if (isMobile && !userInteracted) {
             console.log(`Mobile: waiting for user interaction before playing video ${index}`);
             return;
           }
           
-          // Ensure video is muted for autoplay to work
           video.muted = true;
           
-          // Check if video is ready to play
           const playWhenReady = () => {
-            if (video.readyState >= 2) { // HAVE_CURRENT_DATA or better (lower threshold for mobile)
+            if (video.readyState >= 2) {
               video.currentTime = 0;
               video.play().catch((error) => {
                 console.log(`Autoplay failed for slide ${index}:`, error);
-                // Fallback: show poster image
                 if (slide.posterUrl) {
                   console.log(`Falling back to poster image for slide ${index}`);
                 }
               });
             } else if (!isMobile) {
-              // Only retry on desktop
               setTimeout(playWhenReady, 100);
             }
           };
@@ -254,7 +306,6 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
           playWhenReady();
         }
       } else {
-        // Pause and reset other videos
         video.pause();
         video.currentTime = 0;
       }
@@ -266,10 +317,9 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
     if (!slider.current) return;
     
     const currentSlideData = slides[currentSlide];
-    // Longer duration on mobile to account for loading
     let duration = 4000;
     if (currentSlideData?.mediaType === 'video') {
-      duration = isMobile ? 8000 : 6000; // Even longer on mobile for videos
+      duration = isMobile ? 8000 : 6000;
     }
     
     const interval = setInterval(() => {
@@ -279,7 +329,9 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
     return () => clearInterval(interval);
   }, [slider, currentSlide, slides, isMobile]);
 
+  // Improved video event handlers
   const handleVideoLoadStart = (idx: number) => {
+    console.log(`Video ${idx} load start`);
     setVideoLoading(prev => {
       const newState = [...prev];
       newState[idx] = true;
@@ -288,6 +340,16 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
   };
 
   const handleVideoCanPlay = (idx: number) => {
+    console.log(`Video ${idx} can play`);
+    setVideoLoading(prev => {
+      const newState = [...prev];
+      newState[idx] = false;
+      return newState;
+    });
+  };
+
+  const handleVideoLoadedData = (idx: number) => {
+    console.log(`Video ${idx} loaded data, readyState:`, videoRefs.current[idx]?.readyState);
     setVideoLoading(prev => {
       const newState = [...prev];
       newState[idx] = false;
@@ -297,11 +359,15 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
 
   const handleVideoLoadedMetadata = (idx: number) => {
     console.log(`Video ${idx} metadata loaded`);
-    // On mobile, immediately try to load more data after metadata
+    setVideoLoading(prev => {
+      const newState = [...prev];
+      newState[idx] = false;
+      return newState;
+    });
+
     if (isMobile && idx === currentSlide) {
       const video = videoRefs.current[idx];
       if (video && video.readyState < 2) {
-        // Small delay to prevent overwhelming the browser
         setTimeout(() => {
           if (video.readyState < 2) {
             video.load();
@@ -309,6 +375,51 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
         }, 100);
       }
     }
+  };
+
+  const handleVideoError = (idx: number, e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
+    const target = e.currentTarget;
+    console.error(`Video ${idx} error:`, {
+      error: target.error,
+      networkState: target.networkState,
+      readyState: target.readyState,
+      src: target.src,
+      currentTime: target.currentTime
+    });
+    
+    if (target.error) {
+      console.error(`Video ${idx} error details:`, {
+        code: target.error.code,
+        message: target.error.message
+      });
+    }
+    
+    setVideoLoading(prev => {
+      const newState = [...prev];
+      newState[idx] = false;
+      return newState;
+    });
+  };
+
+  const handleVideoWaiting = (idx: number) => {
+    console.log(`Video ${idx} waiting`);
+    const video = videoRefs.current[idx];
+    if (video && video.readyState < 2) {
+      setVideoLoading(prev => {
+        const newState = [...prev];
+        newState[idx] = true;
+        return newState;
+      });
+    }
+  };
+
+  const handleVideoPlaying = (idx: number) => {
+    console.log(`Video ${idx} playing`);
+    setVideoLoading(prev => {
+      const newState = [...prev];
+      newState[idx] = false;
+      return newState;
+    });
   };
 
   if (!slides.length) return null;
@@ -331,49 +442,21 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
                   className="h-full w-full object-cover"
                   src={slide.videoUrl}
                   poster={slide.posterUrl}
-                  autoPlay={false} // Always false - we control manually
+                  autoPlay={false}
                   loop={slide.loop}
-                  muted={true} // Always muted for autoplay to work
-                  playsInline={true} // Critical for iOS
-                  controls={false} // Hide controls on mobile for cleaner look
-                  preload={isMobile ? "metadata" : "auto"} // Force auto preload on desktop
-                  crossOrigin="anonymous" // Important for production
+                  muted={true}
+                  playsInline={true}
+                  controls={false}
+                  preload={isMobile ? "metadata" : "auto"}
+                  crossOrigin="anonymous"
                   onLoadStart={() => handleVideoLoadStart(idx)}
                   onCanPlay={() => handleVideoCanPlay(idx)}
-                  onLoadedData={() => {
-                    console.log(`Video ${idx} data loaded`)
-                    // Force load the video element in production if needed
-                    if (!isMobile && idx > 0) {
-                      const video = videoRefs.current[idx];
-                      if (video && video.readyState < 2) {
-                        setTimeout(() => video.load(), 100);
-                      }
-                    }
-                  }}
-                  onLoadedMetadata={() => {
-                    handleVideoLoadedMetadata(idx)
-                    // Additional production fallback for desktop
-                    if (!isMobile && idx > 0) {
-                      const video = videoRefs.current[idx];
-                      if (video && video.readyState < 2) {
-                        video.load();
-                      }
-                    }
-                  }}
-                  onError={(e) => {
-                    console.log(`Video ${idx} error:`, e)
-                    // Production fallback: try reloading
-                    if (!isMobile && slide.videoUrl) {
-                      const video = videoRefs.current[idx];
-                      if (video) {
-                        setTimeout(() => {
-                          video.src = slide.videoUrl!; // Non-null assertion since we checked above
-                          video.load();
-                        }, 1000);
-                      }
-                    }
-                  }}
-                  webkit-playsinline="true" // Legacy iOS support
+                  onLoadedData={() => handleVideoLoadedData(idx)}
+                  onLoadedMetadata={() => handleVideoLoadedMetadata(idx)}
+                  onError={(e) => handleVideoError(idx, e)}
+                  onWaiting={() => handleVideoWaiting(idx)}
+                  onPlaying={() => handleVideoPlaying(idx)}
+                  webkit-playsinline="true"
                 />
                 
                 {/* Loading overlay for videos */}
@@ -389,7 +472,7 @@ export default function HeroCarouselClient({ slides }: { slides: SlideVM[] }) {
                   src={slide.imageUrl}
                   alt={slide.imageAlt || slide.title || 'Hero'}
                   fill
-                  priority={idx === 0} // Priority for first image
+                  priority={idx === 0}
                   quality={90}
                   sizes="100vw"
                   className="object-cover"

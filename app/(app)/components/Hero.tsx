@@ -1,74 +1,108 @@
-// app/components/Hero.tsx
-import { getPayload } from 'payload'
-import config from '@payload-config'
-import HeroCarouselClient, { type SlideVM } from './HeroCarouselClient'
-
-export const dynamic = 'force-dynamic'
+// app/(app)/components/Hero.tsx
+import { getPayloadHMR } from '@payloadcms/next/utilities';
+import config from '@payload-config';
+import HeroCarouselClient from './HeroCarouselClient';
+import type { SlideVM } from './HeroCarouselClient';
+import type { Media } from '@/payload-types';
 
 export default async function Hero() {
-  const payload = await getPayload({ config })
+  const payload = await getPayloadHMR({ config });
+  
+  try {
+    const slides = await payload.find({
+      collection: 'hero-slides' as any,
+      sort: 'createdAt',
+      limit: 10,
+    });
 
-  const { docs } = await payload.find({
-    collection: 'hero-slides' as any,
-    depth: 1,
-    sort: '-updatedAt',
-    limit: 20,
-  })
+    console.log('Server Raw Payload docs:', slides.docs);
 
-  // Debug: Log the raw Payload data
-  console.log('Raw Payload docs:', JSON.stringify(docs, null, 2))
+    const processedSlides: SlideVM[] = slides.docs.map((slide: any, index: number) => {
+      console.log(`Server Slide ${index} processing:`, {
+        title: slide.title,
+        mediaType: slide.mediaType,
+        hasVideo: !!slide.video,
+        hasVideoUrl: !!slide.videoUrl,
+        videoUrl: slide.videoUrl,
+      });
 
-  const slides: SlideVM[] = (docs ?? []).map((s: any, index: number) => {
-    const img = typeof s.image === 'object' ? s.image : undefined
-    const vid = typeof s.video === 'object' ? s.video : undefined
-    const poster = typeof s.poster === 'object' ? s.poster : undefined
+      let finalVideoUrl = '';
+      let posterUrl = '';
 
-    // Debug: Log each slide's video data
-    console.log(`Slide ${index} video data:`, {
-      hasVideoField: !!s.video,
-      videoType: typeof s.video,
-      videoObject: vid,
-      videoUrl: vid?.url,
-      externalVideoUrl: s.videoUrl,
-      mediaType: s.mediaType,
-    })
+      if (slide.mediaType === 'video') {
+        // Priority 1: External video URL (if provided and not empty)
+        if (slide.videoUrl && slide.videoUrl.trim()) {
+          finalVideoUrl = slide.videoUrl.trim();
+          console.log(`Server Using external video URL for slide ${index}:`, finalVideoUrl);
+        } 
+        // Priority 2: Uploaded video file - use Vercel Blob URL directly
+        else if (slide.video && typeof slide.video === 'object') {
+          const videoMedia = slide.video as Media;
+          if (videoMedia.url) {
+            // Use the Vercel Blob URL directly now that it's working
+            finalVideoUrl = videoMedia.url;
+            console.log(`Server Using Blob video URL for slide ${index}:`, finalVideoUrl);
+            
+            // Set poster if available
+            if (videoMedia.thumbnailURL) {
+              posterUrl = videoMedia.thumbnailURL;
+            }
+          }
+        }
 
-    const hasVideo = Boolean((s.videoUrl as string | undefined)?.trim() || vid?.url)
-    const mediaType: SlideVM['mediaType'] = hasVideo ? 'video' : 'image'
+        // Handle separate poster upload
+        if (slide.poster && typeof slide.poster === 'object') {
+          const posterMedia = slide.poster as Media;
+          if (posterMedia.url) {
+            posterUrl = posterMedia.url;
+          }
+        }
+      }
 
-    // --- CTA link resolution ---
-    // 1) Force the second slide (index 1) to go to /#deals
-    // 2) Otherwise, if your CMS later has ctaLinkType: 'anchor' + anchorId, use that
-    // 3) Otherwise, fall back to the plain ctaLink from CMS
-    const fromCMSLink = (s.ctaLink as string | undefined)?.trim()
-    const anchorLink =
-      s?.ctaLinkType === 'anchor' && typeof s?.anchorId === 'string' && s.anchorId.trim()
-        ? `/#${s.anchorId.trim()}`
-        : undefined
-    const finalCTALink = index === 1 ? '/#deals' : (anchorLink || fromCMSLink)
+      const processedSlide: SlideVM = {
+        title: slide.title || '',
+        subtitle: slide.subtitle || '',
+        ctaLabel: slide.ctaLabel || '',
+        ctaLink: slide.ctaLink?.trim() || '',
+        mediaType: slide.mediaType as 'image' | 'video',
+        videoUrl: finalVideoUrl || undefined,
+        posterUrl: posterUrl || undefined,
+        imageUrl: slide.mediaType === 'image' && slide.image && typeof slide.image === 'object' 
+          ? ((slide.image as any).url || undefined)
+          : undefined,
+        imageAlt: slide.mediaType === 'image' && slide.image && typeof slide.image === 'object' 
+          ? ((slide.image as any).alt || slide.title || 'Hero image')
+          : (slide.title || 'Hero image'),
+        autoplay: slide.autoplay ?? true,
+        loop: slide.loop ?? true,
+        muted: slide.muted ?? true,
+        controls: slide.controls ?? false,
+      };
 
-    const mappedSlide = {
-      title: String(s.title ?? ''),
-      subtitle: s.subtitle ?? undefined,
-      ctaLabel: s.ctaLabel ?? undefined,
-      ctaLink: finalCTALink, // <<— use resolved link
-      mediaType,
-      imageUrl: img?.url ?? undefined,
-      imageAlt: (img?.alt as string | undefined) ?? s.title ?? 'Hero',
-      videoUrl: (s.videoUrl as string | undefined)?.trim() || (vid?.url as string | undefined),
-      posterUrl: poster?.url ?? undefined,
-      autoplay: Boolean(s.autoplay ?? true),
-      loop: Boolean(s.loop ?? true),
-      muted: Boolean(s.muted ?? true),
-      controls: Boolean(s.controls ?? false),
-    } satisfies SlideVM
+      console.log(`Server Mapped slide ${index}:`, processedSlide);
+      return processedSlide;
+    });
 
-    // Debug: Log the final mapped slide
-    console.log(`Mapped slide ${index}:`, mappedSlide)
+    // Filter out slides without proper media
+    const validSlides = processedSlides.filter(slide => {
+      if (slide.mediaType === 'video') {
+        return !!slide.videoUrl;
+      } else {
+        return !!slide.imageUrl;
+      }
+    });
 
-    return mappedSlide
-  })
+    console.log(`Server Final slides count: ${validSlides.length}/${processedSlides.length}`);
 
-  if (!slides.length) return null
-  return <HeroCarouselClient slides={slides} />
+    if (validSlides.length === 0) {
+      console.warn('No valid slides found');
+      return <div>No hero slides available</div>;
+    }
+
+    return <HeroCarouselClient slides={validSlides} />;
+
+  } catch (error) {
+    console.error('Error fetching hero slides:', error);
+    return <div>Error loading hero slides</div>;
+  }
 }
