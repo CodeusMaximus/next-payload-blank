@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 let pusherServer: { trigger: (ch: string, ev: string, data: any) => Promise<any> } | null = null
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  pusherServer = require('@/lib/pusher/server').pusherServer
+  pusherServer = require('../../../lib/pusher/server').pusherServer
 } catch (_) {
   // fallback: no pusher in dev
   pusherServer = null
