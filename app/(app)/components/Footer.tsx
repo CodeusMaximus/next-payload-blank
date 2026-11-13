@@ -247,9 +247,8 @@ export default function Footer({ data }: FooterProps) {
 
                   {status && (
                     <p
-                      className={`text-sm mt-2 ${
-                        status.ok ? 'text-green-400' : 'text-rose-400'
-                      }`}
+                      className={`text-sm mt-2 ${status.ok ? 'text-green-400' : 'text-rose-400'
+                        }`}
                     >
                       {status.msg}
                     </p>
@@ -323,10 +322,30 @@ export default function Footer({ data }: FooterProps) {
           </div>
         </div>
 
-        {/* Bottom: Copyright */}
-        <div className="border-t border-gray-800 mt-10 py-6 text-center">
+        {/* Bottom: Copyright and website credits */}
+        <div className="border-t border-gray-800 mt-10 py-6 text-center space-y-2">
           <p className="text-gray-400 text-sm">
             {data?.copyright || `© ${currentYear} Alper Grocery. All rights reserved.`}
+          </p>
+          <p className="text-gray-400 text-xs leading-relaxed">
+            Website Design &amp; Development by{' '}
+            <a
+              href="https://www.mediadari.net/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-200 hover:text-white underline underline-offset-4 transition-colors"
+            >
+              MediaDari
+            </a>
+            <span className="mx-2 text-gray-600" aria-hidden="true">|</span>
+            <a
+              href="https://www.mediadari.net/staten-island/web-design"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-200 hover:text-white underline underline-offset-4 transition-colors"
+            >
+              Staten Island Web Design
+            </a>
           </p>
         </div>
       </div>
